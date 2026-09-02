@@ -15,3 +15,34 @@ body {
   margin: 0;
   padding: 0;
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   PHONE ONLY. Nothing in this block applies at >=640px, so the centred
+   390x844 frame on desktop keeps the inline styles from App.tsx untouched and
+   renders pixel-identically. !important is required to beat those inline
+   styles; a media query cannot be expressed inline, which is why this lives
+   here rather than in the component.
+   640px is Tailwind's `sm`. Widest phone in CSS px is ~430; narrowest tablet
+   ~768 — so the gap is comfortable.
+   ─────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 639px) {
+  .app-frame {
+    width: 100vw !important;
+    /* dvh, not vh: vh counts the collapsing URL bar, which would push the
+       bottom nav off-screen. */
+    height: 100dvh !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Full-bleed puts the nav against the physical screen edge, where the home
+     indicator lives. Lift it by the inset (0 on phones without one). */
+  .island-nav {
+    bottom: calc(1.25rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  /* minWidth:300 + border-box fits 320px, but a 280px foldable would overflow. */
+  .island-nav > div {
+    max-width: calc(100vw - 24px);
+  }
+}

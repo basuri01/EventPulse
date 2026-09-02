@@ -181,22 +181,6 @@ function inferLocation(x: number, y: number): string {
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared small components
 // ─────────────────────────────────────────────────────────────────────────────
-/**
- * The phone status-bar clock. `h:mm`, 12-hour, no leading zero and no AM/PM,
- * matching the "9:41" mockup string it replaces. Its own component so the
- * once-a-minute tick re-renders this span and not the whole App tree, and it
- * inherits its colour from the status-bar row exactly as the old span did.
- */
-function StatusBarClock() {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-  const time = `${now.getHours() % 12 || 12}:${String(now.getMinutes()).padStart(2, "0")}`;
-  return <span className="text-[11px] font-mono font-medium">{time}</span>;
-}
-
 function BackBtn({ onBack }: { onBack: () => void }) {
   return (
     <button onClick={onBack} className="flex items-center gap-1.5 text-sm font-medium" style={{ color: muted }}>
@@ -1567,7 +1551,7 @@ function LeaveModal({ onConfirm, onCancel, isOrganizer = false }: { onConfirm: (
 // ─────────────────────────────────────────────────────────────────────────────
 function IslandNav<T extends string>({ items, active, onChange }: { items: { id: T; label: string; icon: (a: boolean) => React.ReactNode }[]; active: T; onChange: (id: T) => void }) {
   return (
-    <div className="absolute bottom-5 left-1/2 z-30" style={{ transform: "translateX(-50%)" }}>
+    <div className="absolute bottom-5 left-1/2 z-30 island-nav" style={{ transform: "translateX(-50%)" }}>
       <div className="flex items-center gap-1 px-3 py-2.5"
         style={{ background: "rgba(26,25,23,0.92)", backdropFilter: "blur(20px)", borderRadius: 999, boxShadow: "0 8px 32px rgba(0,0,0,0.28), 0 0 0 1px rgba(255,255,255,0.08)", minWidth: items.length > 3 ? 300 : 240 }}>
         {items.map(({ id, label, icon }) => (
@@ -2248,9 +2232,10 @@ export default function App() {
 
   return (
     <div className="w-full h-full flex items-center justify-center" style={{ background: bg }}>
-      <div className="relative flex flex-col overflow-hidden"
+      {/* app-frame: styles below are the DESKTOP presentation and stay inline.
+          index.css overrides them only under @media (max-width:639px). */}
+      <div className="relative flex flex-col overflow-hidden app-frame"
         style={{ width: "min(390px, 100vw)", height: "min(844px, 100vh)", borderRadius: "clamp(0px, 3vw, 44px)", boxShadow: "0 0 0 1px rgba(0,0,0,0.12), 0 40px 80px rgba(0,0,0,0.25)", background: cream }}>
-        {/* Status bar */}
         {/* Critical statement modal — rendered at root so it's never clipped */}
         {criticalStatementFor && (
           <CriticalStatementModal
@@ -2259,23 +2244,16 @@ export default function App() {
             onConfirm={handleCriticalConfirm}
           />
         )}
-        <div className="flex items-center justify-between px-6 pt-3 pb-1 z-20 relative shrink-0" style={{ color: "#6b6456" }}>
-          <StatusBarClock />
-          <div className="flex items-center gap-2">
-            <div className="flex gap-[3px] items-end h-3">
-              {[4, 6, 8, 10].map((h, i) => <div key={i} style={{ height: h, width: 3, background: "#6b6456", borderRadius: 1 }} />)}
-            </div>
-            <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
-              <path d="M1 9C3 6 5.2 4.5 8 4.5S13 6 15 9" stroke="#6b6456" strokeWidth="1.3" strokeLinecap="round" />
-              <path d="M3.5 9C5 7 6.4 6.5 8 6.5s3 .5 4.5 2.5" stroke="#6b6456" strokeWidth="1.3" strokeLinecap="round" />
-              <circle cx="8" cy="10.5" r="1" fill="#6b6456" />
-            </svg>
-            <svg width="26" height="13" viewBox="0 0 26 13" fill="none">
-              <rect x="0.5" y="0.5" width="22" height="12" rx="3.5" stroke="#6b6456" strokeWidth="1" />
-              <rect x="2" y="2" width="17" height="9" rx="2" fill="#1a1917" />
-              <path d="M24 4.5v4a2 2 0 000-4z" fill="#6b6456" />
-            </svg>
-          </div>
+        {/* App name. Replaces the mock clock/signal/wifi/battery row: on a real
+            phone that duplicated the device status bar. Same box as before --
+            px-6, pb-1, and an 11px line that was already the tallest item in
+            the row -- so nothing below shifts on either platform. paddingTop
+            adds the notch inset; env() is 0 where there is none, so desktop is
+            unchanged, and if env() were unsupported the calc drops and pt-3
+            still applies. */}
+        <div className="flex items-center justify-between px-6 pt-3 pb-1 z-20 relative shrink-0"
+          style={{ color: "#6b6456", paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }}>
+          <span className="text-[11px] font-mono font-medium">EventPulse</span>
         </div>
         <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative">{renderContent()}</div>
       </div>

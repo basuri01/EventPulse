@@ -1,22 +1,54 @@
 /**
  * Map coordinates are PERCENTAGES 0-100 of the floor-map extent, never 0-1.
- * This function is copied verbatim from the reference UI so that a pin's
- * location string is identical whether it is derived on the client or here.
+ *
+ * ONLY meaningful for the bundled IIT Delhi campus map. An event with a custom
+ * uploaded floor plan must NOT be labelled with these names — see reports.create.
+ *
+ * Bands are measured off src/imports/iitd-campus-map.jpg.jpeg by reading where
+ * each printed label actually sits, so every cell is named for what is inside
+ * it. Kept byte-identical to the copy in src/App.tsx.
  */
+/**
+ * X bands are in PIN coordinates (fractions of the pannable layer), NOT of the
+ * source image. The map <img> uses objectFit:"cover" in a layer whose aspect is
+ * 1170x815 at the 390x844 phone frame, while iitd-campus-map.jpg.jpeg is
+ * 3200x1800 -- so ~139px of source is cropped off each side and only source x
+ * 9.6%..90.4% is reachable. These values are the source-image boundaries
+ * 28/45/62/78 pushed through that crop:
+ *
+ *     source 28 45 62 78  ->  pin 22.7559 43.8082 64.8604 84.6743
+ *
+ * Floored to 2dp so a landmark sitting exactly ON a source boundary still
+ * lands in the higher band, matching bandIndex's >= test in source space.
+ *
+ * So they are tied to THREE things: the 390x844 frame, objectFit:"cover", and
+ * this exact 3200x1800 asset. Change any one and these numbers are wrong. The
+ * robust fix is to size the pannable layer to the image's aspect ratio, which
+ * would make pin coords equal source coords and let these go back to
+ * 28/45/62/78 -- deliberately not done yet.
+ *
+ * Y needs no such correction: cover crops only horizontally here, so pin y and
+ * source y are 1:1.
+ */
+const X_BANDS = [22.75, 43.80, 64.86, 84.67];  // 5 columns, far-left -> far-right (pin coords)
+const Y_BANDS = [40, 55, 68];      // 4 rows, top -> bottom
+
+const ZONES: string[][] = [
+  // far-left              left                 centre                       right                    far-right
+  ["Hostels (North-West)", "Hostels / Creche",  "Academic Area",             "Rose Garden / Nursery", "Amaltas / IITD Market"],
+  ["Nalanda Grounds",      "Hospital / SAC",    "Main Grounds / Library",    "LHC / SBI",             "East / Old Campus"],
+  ["Gulmohar / Mini Mart", "Nalanda / OAT",     "Indoor Sports / Block 102", "IRD Hostel",            "Residences (East Campus)"],
+  ["West / New Campus",    "West / New Campus", "Block 102",                 "Campus Edge (South)",   "Campus Edge (South)"],
+];
+
+function bandIndex(value: number, edges: number[]): number {
+  let i = 0;
+  while (i < edges.length && value >= edges[i]) i++;
+  return i;
+}
+
 export function inferLocation(x: number, y: number): string {
-  if (x < 28 && y < 45) return "Hostels (North-West)";
-  if (x < 28 && y > 55) return "West / New Campus";
-  if (x < 28) return "Nalanda Grounds";
-  if (x < 45 && y < 40) return "Hostels (Central)";
-  if (x < 45 && y < 55) return "SAC / OAT Area";
-  if (x < 45) return "Gulmohar / Nalanda";
-  if (x < 62 && y < 40) return "Academic Area";
-  if (x < 62 && y < 55) return "Main Grounds";
-  if (x < 62) return "Indoor Sports / Block 102";
-  if (x < 78 && y < 40) return "Main Building / Library";
-  if (x < 78 && y < 55) return "LHC / Block 99B";
-  if (x < 78) return "IRD Hostel";
-  return "East / Old Campus";
+  return ZONES[bandIndex(y, Y_BANDS)][bandIndex(x, X_BANDS)];
 }
 
 /** Critical first, matching the client's PRIORITY_ORDER. */

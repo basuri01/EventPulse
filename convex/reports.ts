@@ -9,6 +9,14 @@ const MODERATORS = ["ORGANIZER", "STAFF"] as const;
 const MAX_REPORTS = 200;
 const MAX_DESCRIPTION = 1000;
 
+/**
+ * Stored as the location of a report on a custom uploaded floor plan, where we
+ * have no zone names to give. Deliberately neutral: it says only what we know
+ * for certain -- that the reporter dropped a pin -- and implies no real place.
+ * Occupies the same slot as a zone name, so cards lay out identically.
+ */
+const NO_ZONE = "Pinned on map";
+
 /** The state machine. `resolved` is a flag, so a resolved report reads as "resolved". */
 type ReportState = "pending" | "approved" | "rejected" | "resolved";
 const LEGAL_TRANSITIONS: Record<ReportState, ReportState[]> = {
@@ -113,6 +121,14 @@ export const create = mutation({
     const pinX = clampPercent(args.pinX, "pinX");
     const pinY = clampPercent(args.pinY, "pinY");
 
+    // Zone names come from the bundled IIT Delhi campus map only. An event with
+    // a custom uploaded floor plan has no zones we can name, so we name none --
+    // a confident "IRD Hostel" on a shopping-mall plan is worse than no label.
+    // pinX/pinY are exact either way, so the marker is unaffected.
+    const event = await ctx.db.get("events", args.eventId);
+    if (event === null) throw new Error("That event no longer exists.");
+    const location = event.mapStorageId === undefined ? inferLocation(pinX, pinY) : NO_ZONE;
+
     // Trusted reporters and event staff skip the moderation queue.
     const autoApprove =
       membership.role === "STAFF" || membership.role === "ORGANIZER" || membership.trustScore > 90;
@@ -121,7 +137,7 @@ export const create = mutation({
       eventId: args.eventId,
       reporterId: membership.userId,
       description,
-      location: inferLocation(pinX, pinY),
+      location,
       pinX,
       pinY,
       status: autoApprove ? "approved" : "pending",

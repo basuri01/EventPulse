@@ -5,7 +5,10 @@ import jsQR from "jsqr";
 import qrcodeGenerator from "qrcode-generator";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
-import campusMap from "@/imports/image-7.png";
+// The bundled fallback map, used when an event has no uploaded floor plan.
+// 3200x1800. inferLocation's zone bands are measured off THIS file, so the two
+// must be changed together.
+import campusMap from "@/imports/iitd-campus-map.jpg.jpeg";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -35,6 +38,19 @@ interface Report {
   priority?: Priority; views: number; officialStatement?: string;
   createdAt: number; authorTrustScore: number; isMine: boolean;
   reviewedByMe: boolean; reviewedAt?: number;
+}
+
+/**
+ * THE single definition of "live on a public surface": approved, not withdrawn
+ * by a ban, not yet resolved. The feed, the map markers and the critical-alert
+ * badge all derive from this one predicate, so they cannot drift apart -- a
+ * resolved report used to leave the feed while its pin stayed on the map.
+ *
+ * Deliberately NOT used by MyReportsSheet or StaffReportsView: those two show
+ * a reporter their own rejections and give moderators the full history.
+ */
+function isLiveReport(r: Report): boolean {
+  return r.status === "approved" && !r.banned && !r.resolved;
 }
 
 interface Pin { id: number; x: number; y: number; }
@@ -109,25 +125,78 @@ const cream = "#f5f1ea", bg = "#e8e4dc", ink = "#1a1917", muted = "#8a7f6e";
 const dimmed = "#a09585", accent = "#5b3ff8", border = "rgba(0,0,0,0.08)";
 const card = "rgba(255,255,255,0.75)";
 
+/**
+ * Map coordinates are PERCENTAGES 0-100 of the floor-map extent, never 0-1.
+ *
+ * ONLY meaningful for the bundled IIT Delhi campus map. An event with a custom
+ * uploaded floor plan must NOT be labelled with these names — see reports.create.
+ *
+ * Bands are measured off src/imports/iitd-campus-map.jpg.jpeg by reading where
+ * each printed label actually sits, so every cell is named for what is inside
+ * it. Kept byte-identical to the copy in src/App.tsx.
+ */
+/**
+ * X bands are in PIN coordinates (fractions of the pannable layer), NOT of the
+ * source image. The map <img> uses objectFit:"cover" in a layer whose aspect is
+ * 1170x815 at the 390x844 phone frame, while iitd-campus-map.jpg.jpeg is
+ * 3200x1800 -- so ~139px of source is cropped off each side and only source x
+ * 9.6%..90.4% is reachable. These values are the source-image boundaries
+ * 28/45/62/78 pushed through that crop:
+ *
+ *     source 28 45 62 78  ->  pin 22.7559 43.8082 64.8604 84.6743
+ *
+ * Floored to 2dp so a landmark sitting exactly ON a source boundary still
+ * lands in the higher band, matching bandIndex's >= test in source space.
+ *
+ * So they are tied to THREE things: the 390x844 frame, objectFit:"cover", and
+ * this exact 3200x1800 asset. Change any one and these numbers are wrong. The
+ * robust fix is to size the pannable layer to the image's aspect ratio, which
+ * would make pin coords equal source coords and let these go back to
+ * 28/45/62/78 -- deliberately not done yet.
+ *
+ * Y needs no such correction: cover crops only horizontally here, so pin y and
+ * source y are 1:1.
+ */
+const X_BANDS = [22.75, 43.80, 64.86, 84.67];  // 5 columns, far-left -> far-right (pin coords)
+const Y_BANDS = [40, 55, 68];      // 4 rows, top -> bottom
+
+const ZONES: string[][] = [
+  // far-left              left                 centre                       right                    far-right
+  ["Hostels (North-West)", "Hostels / Creche",  "Academic Area",             "Rose Garden / Nursery", "Amaltas / IITD Market"],
+  ["Nalanda Grounds",      "Hospital / SAC",    "Main Grounds / Library",    "LHC / SBI",             "East / Old Campus"],
+  ["Gulmohar / Mini Mart", "Nalanda / OAT",     "Indoor Sports / Block 102", "IRD Hostel",            "Residences (East Campus)"],
+  ["West / New Campus",    "West / New Campus", "Block 102",                 "Campus Edge (South)",   "Campus Edge (South)"],
+];
+
+function bandIndex(value: number, edges: number[]): number {
+  let i = 0;
+  while (i < edges.length && value >= edges[i]) i++;
+  return i;
+}
+
 function inferLocation(x: number, y: number): string {
-  if (x < 28 && y < 45) return "Hostels (North-West)";
-  if (x < 28 && y > 55) return "West / New Campus";
-  if (x < 28) return "Nalanda Grounds";
-  if (x < 45 && y < 40) return "Hostels (Central)";
-  if (x < 45 && y < 55) return "SAC / OAT Area";
-  if (x < 45) return "Gulmohar / Nalanda";
-  if (x < 62 && y < 40) return "Academic Area";
-  if (x < 62 && y < 55) return "Main Grounds";
-  if (x < 62) return "Indoor Sports / Block 102";
-  if (x < 78 && y < 40) return "Main Building / Library";
-  if (x < 78 && y < 55) return "LHC / Block 99B";
-  if (x < 78) return "IRD Hostel";
-  return "East / Old Campus";
+  return ZONES[bandIndex(y, Y_BANDS)][bandIndex(x, X_BANDS)];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared small components
 // ─────────────────────────────────────────────────────────────────────────────
+/**
+ * The phone status-bar clock. `h:mm`, 12-hour, no leading zero and no AM/PM,
+ * matching the "9:41" mockup string it replaces. Its own component so the
+ * once-a-minute tick re-renders this span and not the whole App tree, and it
+ * inherits its colour from the status-bar row exactly as the old span did.
+ */
+function StatusBarClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const time = `${now.getHours() % 12 || 12}:${String(now.getMinutes()).padStart(2, "0")}`;
+  return <span className="text-[11px] font-mono font-medium">{time}</span>;
+}
+
 function BackBtn({ onBack }: { onBack: () => void }) {
   return (
     <button onClick={onBack} className="flex items-center gap-1.5 text-sm font-medium" style={{ color: muted }}>
@@ -444,7 +513,7 @@ function PannableMap({
             transition: drag.current || pinchRef.current ? "none" : "transform 0.15s ease",
           }}
         >
-          <img src={mapUrl ?? campusMap} alt="IIT Delhi campus map" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} draggable={false} />
+          <img src={mapUrl ?? campusMap} alt={mapUrl ? "Event floor plan" : "IIT Delhi campus map"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} draggable={false} />
 
           {/* Approved report pins — clickable when not in pinpoint mode */}
           {approvedReports.map((r) => (
@@ -1027,7 +1096,7 @@ function FeedView({ reports, onView, trustScores, onResolve, seenIds, showSeen =
   onResolve?: (id: string) => void; seenIds?: Set<string>; showSeen?: boolean;
   notifications?: AppNotification[]; error?: string | null;
 }) {
-  const approved = [...reports.filter((r) => r.status === "approved" && !r.banned && !r.resolved)]
+  const approved = [...reports.filter(isLiveReport)]
     .sort((a, b) => (PRIORITY_ORDER[a.priority ?? "low"] ?? 3) - (PRIORITY_ORDER[b.priority ?? "low"] ?? 3));
 
   return (
@@ -1217,9 +1286,9 @@ function MyReportsSheet({ reports, userName, onClose }: { reports: Report[]; use
 // ─────────────────────────────────────────────────────────────────────────────
 // You View
 // ─────────────────────────────────────────────────────────────────────────────
-function YouView({ role, name, onLeave, reports, trustScore, eventName, joinedAt, reviewedToday }: {
+function YouView({ role, name, onLeave, reports, trustScore, eventName, venue, date, joinedAt, reviewedToday }: {
   role: Role; name: string; onLeave: () => void; reports: Report[]; trustScore: number;
-  eventName: string; joinedAt: number | null; reviewedToday: number;
+  eventName: string; venue: string; date: string; joinedAt: number | null; reviewedToday: number;
 }) {
   const [showMyReports, setShowMyReports] = useState(false);
   const initials = name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -1233,8 +1302,8 @@ function YouView({ role, name, onLeave, reports, trustScore, eventName, joinedAt
     { label: "Reports Filed (Lifetime)", value: String(myReports.length) },
   ];
   const staffRows = [
-    { label: "Zone", value: "Hall A & Lobby" },
-    { label: "Shift", value: "12:00 — 22:00" },
+    { label: "Venue", value: venue || "—" },
+    { label: "Date", value: date || "—" },
     { label: "Reports Reviewed", value: `${reviewedToday} today` },
     { label: "Check-in", value: checkIn },
   ];
@@ -1605,6 +1674,15 @@ export default function App() {
   const activeMembership = memberships?.[0] ?? null;
   const activeEventId = activeMembership?.eventId ?? null;
   const activeEvent = useQuery(api.events.get, activeEventId ? { eventId: activeEventId } : "skip");
+  // The event doc carries mapUrl. Until it resolves we do not know WHICH map
+  // this event uses, and the bundled fallback is not a safe guess -- rendering
+  // it flashed the wrong venue's map over the right one.
+  //
+  // `undefined` covers BOTH windows: the query still in flight, and the query
+  // still skipped because `memberships` has not yet pushed the new membership.
+  // That second window is the one you hit on first entry, where handleJoin
+  // sets screen="app" before activeEventId exists.
+  const eventLoading = activeEvent === undefined;
 
   const isModerator = activeMembership?.role === "ORGANIZER" || activeMembership?.role === "STAFF";
   const reportRows = useQuery(api.reports.listForEvent, activeEventId ? { eventId: activeEventId } : "skip");
@@ -1678,7 +1756,7 @@ export default function App() {
   const [showNotifs, setShowNotifs] = useState(false);
   const notifications: AppNotification[] = useMemo(
     () => reports
-      .filter((r) => r.priority === "critical" && !!r.officialStatement && r.status === "approved" && !r.resolved && !dismissedNotifs.has(r.id))
+      .filter((r) => isLiveReport(r) && r.priority === "critical" && !!r.officialStatement && !dismissedNotifs.has(r.id))
       .map((r) => ({ id: r.id, reportId: r.id, location: r.location, description: r.description, statement: r.officialStatement ?? "", time: r.time })),
     [reports, dismissedNotifs],
   );
@@ -1734,9 +1812,10 @@ export default function App() {
     }
   }, [isLoading, isAuthenticated, membershipsLoading, restored, activeMembership]);
 
-  const approvedReports = reports.filter((r) => r.status === "approved" && !r.banned);
+  const approvedReports = reports.filter(isLiveReport);
   const eventName = activeEvent?.name ?? ((eventData.name?.trim()) || "Event Pulse '26");
   const eventVenue = activeEvent?.venue ?? ((eventData.venue?.trim()) || "IIT Delhi");
+  const eventDate = activeEvent?.date ?? (eventData.date ?? "");
   const mapUrl = activeEvent?.mapUrl ?? null;
   const reviewedToday = useMemo(() => {
     const midnight = new Date().setHours(0, 0, 0, 0);
@@ -1873,6 +1952,10 @@ export default function App() {
     // Loading: show the splash and make NO routing decision.
     if (isLoading) return <SplashScreen />;
     if (isAuthenticated && (membershipsLoading || !restored)) return <SplashScreen />;
+    // Same treatment for the event doc, so no map image renders before we know
+    // its URL. Scoped to the in-event screens; Home and the create flow do not
+    // read the event doc and must not splash while it loads.
+    if ((screen === "app" || screen === "staff-app") && eventLoading) return <SplashScreen />;
     switch (screen) {
       case "login":
         return <LoginScreen onLogin={() => { void signIn("google"); }} />;
@@ -1984,7 +2067,7 @@ export default function App() {
                 error={actionError}
               />
             )}
-            {tab === "you" && <YouView role={role} name={userName} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} />}
+            {tab === "you" && <YouView role={role} name={userName} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} />}
             <IslandNav items={attendeeNav} active={tab} onChange={(t) => { setTab(t); if (t !== "map") setPinpointMode(false); }} />
             {showReport && <ReportModal onClose={() => { setShowReport(false); setPins([]); setPinpointMode(false); }} onSubmit={(desc) => handleReport(desc)} pin={pins[0] ?? null} />}
             {showLeave && <LeaveModal onConfirm={() => { void handleLeave(); }} onCancel={() => setShowLeave(false)} isOrganizer={role === "organizer"} />}
@@ -2151,7 +2234,7 @@ export default function App() {
                 error={actionError}
               />
             )}
-            {staffTab === "you" && <YouView role={role} name={userName} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} />}
+            {staffTab === "you" && <YouView role={role} name={userName} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} />}
             <IslandNav items={staffNav} active={staffTab} onChange={setStaffTab} />
             {showReport && <ReportModal onClose={() => { setShowReport(false); setPins([]); }} onSubmit={(desc) => handleReport(desc)} pin={pins[0] ?? null} />}
             {showLeave && <LeaveModal onConfirm={() => { void handleLeave(); }} onCancel={() => setShowLeave(false)} isOrganizer={role === "organizer"} />}
@@ -2177,7 +2260,7 @@ export default function App() {
           />
         )}
         <div className="flex items-center justify-between px-6 pt-3 pb-1 z-20 relative shrink-0" style={{ color: "#6b6456" }}>
-          <span className="text-[11px] font-mono font-medium">9:41</span>
+          <StatusBarClock />
           <div className="flex items-center gap-2">
             <div className="flex gap-[3px] items-end h-3">
               {[4, 6, 8, 10].map((h, i) => <div key={i} style={{ height: h, width: 3, background: "#6b6456", borderRadius: 1 }} />)}

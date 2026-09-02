@@ -1,0 +1,18 @@
+[build]
+  # `npm run build` is `tsc -b && vite build`, so a type error fails the deploy
+  # rather than shipping a broken bundle.
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Vite 8 needs Node ^20.19 || >=22.12. Pinned so a change to Netlify's
+  # default image cannot silently break the build.
+  NODE_VERSION = "22"
+
+# SPA fallback. The app keeps its screen in React state rather than the URL, so
+# every path must serve index.html -- otherwise refreshing on anything other
+# than "/" returns Netlify's 404 instead of the app.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

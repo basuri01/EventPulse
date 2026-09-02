@@ -113,6 +113,15 @@ async function decodeQrFromFile(file: File): Promise<string | null> {
   return jsQR(data, width, height, { inversionAttempts: "attemptBoth" })?.data ?? null;
 }
 
+/**
+ * Same 640px breakpoint as the phone-only block in index.css. A media query
+ * gates layout but cannot stop a JS API call, so the camera needs this check.
+ * `pointer: coarse` is deliberately stricter than the CSS gate: a narrow
+ * desktop window should reflow, but must never raise a camera prompt.
+ */
+const PHONE_MQ = "(max-width: 639px) and (pointer: coarse)";
+const isPhone = () => typeof window !== "undefined" && window.matchMedia(PHONE_MQ).matches;
+
 const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 const PRIORITY_STYLE: Record<Priority, { bg: string; text: string; label: string }> = {
   critical: { bg: "rgba(220,38,38,0.12)", text: "#dc2626", label: "🔴 Critical" },
@@ -938,12 +947,73 @@ function CreateDoneScreen({ eventData, onEnterEvent, onHome }: { eventData: Even
 // ─────────────────────────────────────────────────────────────────────────────
 // Join / Staff scan screens
 // ─────────────────────────────────────────────────────────────────────────────
-function ScanScreen({ title, sub, accentColor, onJoin, onBack, extraContent, onDecode, busy = false }: { title: string; sub: string; accentColor: string; onJoin: () => void; onBack: () => void; extraContent?: React.ReactNode; onDecode?: (code: string) => void; busy?: boolean }) {
+function ScanScreen({ title, sub, accentColor, onJoin, onBack, extraContent, onDecode, busy = false }: { title: string; sub: string; accentColor: string; onJoin: (code?: string) => void; onBack: () => void; extraContent?: React.ReactNode; onDecode?: (code: string) => void; busy?: boolean }) {
   const [uploaded, setUploaded] = useState(false);
   const [mode, setMode] = useState<"scan" | "upload">("scan");
   const [decoded, setDecoded] = useState<string | null>(null);
   const [decodeError, setDecodeError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  // Evaluated once on mount. Desktop is false forever, so every camera branch
+  // below is dead there: no <video>, no getUserMedia, no label change.
+  const [phone] = useState(isPhone);
+  const cameraOn = phone && !!onDecode;   // join-scan only; staff-scan stays a mock
+  const cbRef = useRef({ onDecode, onJoin });
+  cbRef.current = { onDecode, onJoin };
+
+  // Live camera, PHONE ONLY. Decodes with the same jsQR call and the same
+  // inversionAttempts as the upload path, so both routes read a QR identically.
+  useEffect(() => {
+    if (!cameraOn || mode !== "scan") return;
+    let stream: MediaStream | null = null;
+    let raf = 0, done = false;
+    const canvas = document.createElement("canvas");
+    const stop = () => {
+      done = true;
+      cancelAnimationFrame(raf);
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      stream = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+
+    const tick = () => {
+      if (done) return;
+      const v = videoRef.current;
+      if (!v || v.readyState < 2 || !v.videoWidth) { raf = requestAnimationFrame(tick); return; }
+      canvas.width = v.videoWidth;
+      canvas.height = v.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(v, 0, 0);
+      const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const hit = jsQR(data, width, height, { inversionAttempts: "attemptBoth" })?.data;
+      if (hit) {
+        const normalised = hit.trim().toUpperCase();
+        stop();                             // release the camera before navigating
+        setDecoded(normalised);
+        setDecodeError(null);
+        cbRef.current.onDecode?.(normalised);
+        cbRef.current.onJoin(normalised);   // the same handleJoin the input uses
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" } })
+      .then((granted) => {
+        if (done) { granted.getTracks().forEach((t) => t.stop()); return; }
+        stream = granted;
+        const v = videoRef.current;
+        if (!v) { stop(); return; }
+        v.srcObject = granted;
+        return v.play().then(() => { raf = requestAnimationFrame(tick); });
+      })
+      .catch(() => setCameraError("Camera unavailable — enter the code below."));
+
+    return stop;   // leaving the screen, or switching to the Upload tab
+  }, [cameraOn, mode]);
 
   const onQrChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -986,6 +1056,10 @@ function ScanScreen({ title, sub, accentColor, onJoin, onBack, extraContent, onD
       {mode === "scan" ? (
         <div className="flex-1 flex flex-col gap-4">
           <div className="flex-1 rounded-3xl overflow-hidden flex items-center justify-center relative" style={{ background: "#0f0d0b", minHeight: 240 }}>
+            {cameraOn && (
+              <video ref={videoRef} playsInline muted autoPlay
+                className="absolute inset-0 w-full h-full object-cover" />
+            )}
             <div className="absolute inset-0 flex items-center justify-center z-10">
               <div className="w-44 h-44 relative">
                 {[["top-0 left-0", "rounded-tl-xl border-t-2 border-l-2"], ["top-0 right-0", "rounded-tr-xl border-t-2 border-r-2"],
@@ -997,8 +1071,14 @@ function ScanScreen({ title, sub, accentColor, onJoin, onBack, extraContent, onD
             </div>
             <p className="absolute bottom-5 text-xs font-mono text-center px-8" style={{ color: "rgba(255,255,255,0.4)" }}>Point camera at QR code</p>
           </div>
+          {cameraError && (
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ background: "#dc2626" }} />
+              <p className="text-sm font-medium" style={{ color: "#dc2626" }}>{cameraError}</p>
+            </div>
+          )}
           {extraContent}
-          <button onClick={onJoin} disabled={busy} className="w-full py-4 rounded-2xl font-semibold text-sm text-white" style={{ background: accentColor, opacity: busy ? 0.4 : 1, cursor: busy ? "not-allowed" : "pointer" }}>Simulate Scan (Demo)</button>
+          <button onClick={() => onJoin()} disabled={busy} className="w-full py-4 rounded-2xl font-semibold text-sm text-white" style={{ background: accentColor, opacity: busy ? 0.4 : 1, cursor: busy ? "not-allowed" : "pointer" }}>{cameraOn ? "Join Event" : "Simulate Scan (Demo)"}</button>
         </div>
       ) : (
         <div className="flex-1 flex flex-col gap-4">
@@ -1028,7 +1108,7 @@ function ScanScreen({ title, sub, accentColor, onJoin, onBack, extraContent, onD
               </div>
             </div>
           )}
-          {uploaded && !decodeError && <button onClick={onJoin} disabled={busy} className="w-full py-4 rounded-2xl font-semibold text-sm text-white" style={{ background: accentColor, opacity: busy ? 0.4 : 1, cursor: busy ? "not-allowed" : "pointer" }}>Join Event</button>}
+          {uploaded && !decodeError && <button onClick={() => onJoin()} disabled={busy} className="w-full py-4 rounded-2xl font-semibold text-sm text-white" style={{ background: accentColor, opacity: busy ? 0.4 : 1, cursor: busy ? "not-allowed" : "pointer" }}>Join Event</button>}
         </div>
       )}
       <style>{`@keyframes scanline { 0%, 100% { top: 10%; } 50% { top: 85%; } }`}</style>
@@ -1962,7 +2042,7 @@ export default function App() {
             accentColor={accent}
             busy={joinBusy}
             onDecode={(code) => { setJoinCode(code); setJoinError(null); }}
-            onJoin={() => { void handleJoin(joinCode); }}
+            onJoin={(code) => { void handleJoin(code ?? joinCode); }}
             onBack={() => { setJoinCode(""); setJoinError(null); setScreen("home"); }}
             extraContent={
               <div className="flex flex-col gap-4">

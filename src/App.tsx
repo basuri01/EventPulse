@@ -13,7 +13,7 @@ import campusMap from "@/imports/iitd-campus-map.jpg.jpeg";
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
-type Screen = "login" | "home" | "create-1" | "create-2" | "create-3" | "create-done" | "join-scan" | "staff-scan" | "staff-code" | "app" | "staff-app";
+type Screen = "login" | "home" | "create-1" | "create-2" | "create-3" | "create-done" | "join-scan" | "staff-code" | "app" | "staff-app";
 type Role = "organizer" | "attendee" | "staff";
 type Tab = "map" | "feed" | "you";
 type StaffTab = "map" | "poi" | "reports" | "feed" | "you";
@@ -701,7 +701,7 @@ function HomeScreen({ userName, onCreateEvent, onJoinEvent, onJoinAsStaff, onLog
       icon: <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="4" y="6" width="20" height="16" rx="3" stroke="white" strokeWidth="1.5" /><path d="M14 10v8M10 14h8" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg> },
     { label: "Join an Event", sub: "Attendee · Scan QR to enter", color: "#0ea5e9", action: onJoinEvent,
       icon: <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="4" y="4" width="8" height="8" rx="2" stroke="white" strokeWidth="1.5" /><rect x="16" y="4" width="8" height="8" rx="2" stroke="white" strokeWidth="1.5" /><rect x="4" y="16" width="8" height="8" rx="2" stroke="white" strokeWidth="1.5" /><path d="M16 16h4M20 16v4M16 20h8" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg> },
-    { label: "Join as Staff", sub: "Staff · Scan QR + enter staff code", color: "#10b981", action: onJoinAsStaff,
+    { label: "Join as Staff", sub: "Staff · Enter staff code", color: "#10b981", action: onJoinAsStaff,
       icon: <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="10" r="4" stroke="white" strokeWidth="1.5" /><path d="M6 24c0-4.4 3.6-8 8-8s8 3.6 8 8" stroke="white" strokeWidth="1.5" strokeLinecap="round" /><circle cx="22" cy="20" r="4" fill="white" fillOpacity="0.2" stroke="white" strokeWidth="1.5" /><path d="M20.5 20l1 1 2-2" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg> },
   ];
   return (
@@ -958,7 +958,7 @@ function ScanScreen({ title, sub, accentColor, onJoin, onBack, extraContent, onD
   // Evaluated once on mount. Desktop is false forever, so every camera branch
   // below is dead there: no <video>, no getUserMedia, no label change.
   const [phone] = useState(isPhone);
-  const cameraOn = phone && !!onDecode;   // join-scan only; staff-scan stays a mock
+  const cameraOn = phone && !!onDecode;   // join-scan is the only caller now
   const cbRef = useRef({ onDecode, onJoin });
   cbRef.current = { onDecode, onJoin };
 
@@ -1123,7 +1123,7 @@ function StaffCodeScreen({ onJoin, onBack, error = null, busy = false }: { onJoi
     <div className="flex-1 flex flex-col px-5 pt-4 pb-8" style={{ background: cream }}>
       <BackBtn onBack={onBack} />
       <div className="mt-4 mb-6">
-        <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "#10b981" }}>QR Verified ✓</p>
+        <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "#10b981" }}>STAFF ACCESS</p>
         <h2 className="text-xl font-bold mt-1" style={{ color: ink, letterSpacing: "-0.02em" }}>Enter Staff Code</h2>
         <p className="text-sm mt-1" style={{ color: muted }}>Enter the private code provided by your organizer</p>
       </div>
@@ -1147,7 +1147,7 @@ function MapHeader({ eventName, venue }: { eventName: string; venue: string }) {
   return (
     <>
       <h1 className="text-2xl font-bold text-center mt-0.5" style={{ color: ink, letterSpacing: "-0.02em" }}>{eventName}</h1>
-      <p className="text-xs font-medium" style={{ color: "#6b6456" }}>{venue} · Campus Event</p>
+      <p className="text-xs font-medium" style={{ color: "#6b6456" }}>{venue}</p>
     </>
   );
 }
@@ -1784,7 +1784,6 @@ export default function App() {
   const [showLeave, setShowLeave] = useState(false);
   const [pins, setPins] = useState<Pin[]>([]);
   const [eventData, setEventData] = useState<Partial<EventData>>({ attendeeCode: MOCK_ATTENDEE_CODE, staffCode: MOCK_STAFF_CODE, staff: [] });
-  const [staffCodeStep, setStaffCodeStep] = useState(false);
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
   const [poiPin, setPoiPin] = useState<Pin | null>(null);
   const [poiPinning, setPoiPinning] = useState(false);
@@ -1850,7 +1849,6 @@ export default function App() {
     setShowLeave(false);
     setPins([]);
     setEventData({ attendeeCode: MOCK_ATTENDEE_CODE, staffCode: MOCK_STAFF_CODE, staff: [] });
-    setStaffCodeStep(false);
     setSeenIds(new Set());
     setPoiPin(null);
     setPoiPinning(false);
@@ -1878,7 +1876,10 @@ export default function App() {
 
   const approvedReports = reports.filter(isLiveReport);
   const eventName = activeEvent?.name ?? ((eventData.name?.trim()) || "Event Pulse '26");
-  const eventVenue = activeEvent?.venue ?? ((eventData.venue?.trim()) || "IIT Delhi");
+  // Empty, never a place name: asserting a specific venue we were not given
+  // would be confidently wrong. MapHeader's venue line is its last child, so an
+  // empty string collapses it to zero height and moves nothing.
+  const eventVenue = activeEvent?.venue ?? ((eventData.venue?.trim()) || "");
   const eventDate = activeEvent?.date ?? (eventData.date ?? "");
   const mapUrl = activeEvent?.mapUrl ?? null;
   const reviewedToday = useMemo(() => {
@@ -1931,8 +1932,7 @@ export default function App() {
     try {
       const joined = await joinByCodeMutation({ code });
       setJoinCode("");
-      setStaffCodeStep(false);
-      setPendingRole(joined.role === "ATTENDEE" ? "attendee" : joined.role === "STAFF" ? "staff" : "organizer");
+        setPendingRole(joined.role === "ATTENDEE" ? "attendee" : joined.role === "STAFF" ? "staff" : "organizer");
       setScreen(joined.role === "ATTENDEE" ? "app" : "staff-app");
     } catch (err) {
       setJoinError(errorMessage(err));
@@ -1954,7 +1954,7 @@ export default function App() {
         return;
       }
     }
-    setScreen("home"); setPins([]); setTab("map"); setStaffTab("map"); setShowLeave(false); setShowReport(false); setStaffCodeStep(false); setPinpointMode(false); setStaffPinpointMode(false);
+    setScreen("home"); setPins([]); setTab("map"); setStaffTab("map"); setShowLeave(false); setShowReport(false); setPinpointMode(false); setStaffPinpointMode(false);
     setPendingRole("attendee");
     setEventData({ attendeeCode: MOCK_ATTENDEE_CODE, staffCode: MOCK_STAFF_CODE, staff: [] });
   };
@@ -2025,7 +2025,7 @@ export default function App() {
         return <LoginScreen onLogin={() => { void signIn("google"); }} />;
 
       case "home":
-        return <HomeScreen userName={userName} onCreateEvent={() => setScreen("create-1")} onJoinEvent={() => setScreen("join-scan")} onJoinAsStaff={() => setScreen("staff-scan")} onLogout={() => { void signOut(); }} />;
+        return <HomeScreen userName={userName} onCreateEvent={() => setScreen("create-1")} onJoinEvent={() => setScreen("join-scan")} onJoinAsStaff={() => setScreen("staff-code")} onLogout={() => { void signOut(); }} />;
 
       case "create-1": return <CreateStep1 eventData={eventData} onChange={setEventData} onNext={() => setScreen("create-2")} onBack={() => setScreen("home")} />;
       case "create-2": return <CreateStep2 eventData={eventData} onChange={setEventData} onNext={() => setScreen("create-3")} onBack={() => setScreen("create-1")} />;
@@ -2056,9 +2056,12 @@ export default function App() {
           />
         );
 
-      case "staff-scan":
-        if (staffCodeStep) return <StaffCodeScreen onJoin={(code) => { void handleJoin(code); }} onBack={() => { setJoinError(null); setStaffCodeStep(false); }} error={joinError} busy={joinBusy} />;
-        return <ScanScreen title="Join as Staff" sub="First scan the attendee QR for the event" accentColor="#10b981" onJoin={() => { setJoinError(null); setStaffCodeStep(true); }} onBack={() => setScreen("home")} />;
+      // Staff join is code-only: the organizer never produces a staff QR, so the
+      // scan and upload tabs could never succeed. StaffCodeScreen already stands
+      // alone, so this routes straight to it rather than gutting ScanScreen --
+      // which the attendee flow still needs unchanged.
+      case "staff-code":
+        return <StaffCodeScreen onJoin={(code) => { void handleJoin(code); }} onBack={() => { setJoinError(null); setScreen("home"); }} error={joinError} busy={joinBusy} />;
 
       case "app":
         return (

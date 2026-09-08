@@ -12,6 +12,14 @@ The problem at a large event isn't a lack of information. Thousands of people ca
 see what's going wrong. The problem is that there's no shared, verified view of
 the ground: attendees act on stale information, and organisers find out last.
 
+**Try it**
+- Demo event code (attendee): 85AKNA
+- Demo staff code:            MJGWRWHM
+
+Open the link in two windows. Join with the attendee code in one and the
+staff code in the other. Send a report, approve it from the staff side,
+and watch it appear on both screens without a refresh.
+
 ---
 
 ## Features

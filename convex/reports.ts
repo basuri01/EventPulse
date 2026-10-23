@@ -150,9 +150,11 @@ export const create = mutation({
 });
 
 /**
- * Reports visible to the caller in this event. Rejected reports and reports by
- * banned reporters are hidden from attendees — but a reporter always sees their
- * own, so "My Reports" can show them their own rejection.
+ * Reports visible to the caller in this event. Moderators get everything.
+ * Everyone else gets only APPROVED reports by non-banned reporters, plus their
+ * OWN reports in every status (so "My Reports" can show a pending or rejected
+ * report). Other people's pending reports never reach an attendee's device;
+ * moderators see those through listForStaff.
  */
 export const listForEvent = query({
   args: { eventId: v.id("events") },
@@ -171,7 +173,7 @@ export const listForEvent = query({
     for (const report of reports) {
       const who = index.get(report.reporterId)!;
       const mine = report.reporterId === membership.userId;
-      if (!isModerator && !mine && (report.status === "rejected" || who.banned)) continue;
+      if (!isModerator && !mine && (report.status !== "approved" || who.banned)) continue;
       visible.push(shape(report, who, membership.userId));
     }
     return visible;

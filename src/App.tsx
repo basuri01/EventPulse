@@ -62,6 +62,16 @@ function isLiveReport(r: Report): boolean {
   return r.status === "approved" && !r.banned && !r.resolved;
 }
 
+/**
+ * Awaiting a moderator: pending, and the reporter is not banned. Used ONLY on
+ * rows from listForStaff (moderators), for the "?" pins on the staff map.
+ * Attendees never receive other people's pending reports, and their own are
+ * never drawn on the map.
+ */
+function isAwaitingReview(r: Report): boolean {
+  return r.status === "pending" && !r.banned;
+}
+
 interface Pin { id: number; x: number; y: number; }
 
 interface AppNotification {
@@ -275,7 +285,18 @@ function QRCodeSVG({ value }: { value: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Report Pin Detail Sheet
 // ─────────────────────────────────────────────────────────────────────────────
-function ReportPinDetailSheet({ report, onClose }: { report: Report; onClose: () => void }) {
+/** The Reports queue's own handlers, passed in for a moderator's pending pin. */
+interface PinModeration {
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  onSetPriority: (id: string, p: Priority) => void;
+  onSetCritical: (report: Report) => void;
+}
+
+function ReportPinDetailSheet({ report, onClose, moderation }: { report: Report; onClose: () => void; moderation?: PinModeration }) {
+  // Only the moves the state machine allows from "pending": set a priority
+  // (critical = approve with a statement), approve, or reject.
+  const canModerate = !!moderation && report.status === "pending";
   return (
     <div className="absolute inset-0 z-50 flex items-end sm:items-center sm:justify-center" style={{ background: "rgba(26,25,23,0.4)", backdropFilter: "blur(5px)" }} onClick={onClose}>
       <div className="w-full p-5 pb-8 rounded-t-[28px] sm:rounded-[28px] sm:max-w-[480px]" style={{ background: "#faf8f5", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
@@ -287,7 +308,13 @@ function ReportPinDetailSheet({ report, onClose }: { report: Report; onClose: ()
                 {PRIORITY_STYLE[report.priority].label}
               </div>
             )}
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full" style={{ background: "rgba(22,163,74,0.12)", color: "#15803d" }}>Verified</span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full"
+              style={{
+                background: report.status === "approved" ? "rgba(22,163,74,0.12)" : "rgba(75,85,99,0.12)",
+                color: report.status === "approved" ? "#15803d" : "#4b5563",
+              }}>
+              {report.status === "approved" ? "Verified" : "Unverified"}
+            </span>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center text-sm" style={{ background: "#edeae4", color: "#6b6456" }}>✕</button>
         </div>
@@ -311,6 +338,39 @@ function ReportPinDetailSheet({ report, onClose }: { report: Report; onClose: ()
           <span style={{ color: dimmed }}>·</span>
           <p className="text-[10px] font-mono" style={{ color: dimmed }}>{report.time}</p>
         </div>
+        {canModerate && moderation && (
+          <>
+            <div className="mt-4 mb-2">
+              <p className="text-[9px] font-mono uppercase tracking-widest mb-1.5" style={{ color: dimmed }}>Priority</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {(["critical", "high", "medium", "low"] as Priority[]).map((p) => (
+                  <button key={p}
+                    onClick={() => { if (p === "critical") { onClose(); moderation.onSetCritical(report); } else { moderation.onSetPriority(report.id, p); } }}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all"
+                    style={{
+                      background: report.priority === p ? PRIORITY_STYLE[p].bg : "rgba(0,0,0,0.04)",
+                      color: report.priority === p ? PRIORITY_STYLE[p].text : dimmed,
+                      border: `1px solid ${report.priority === p ? PRIORITY_STYLE[p].text + "40" : "transparent"}`,
+                    }}>
+                    {PRIORITY_STYLE[p].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => { moderation.onApprove(report.id); onClose(); }} className="flex-1 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                style={{ background: "rgba(22,163,74,0.1)", color: "#15803d" }}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#15803d" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                Approve
+              </button>
+              <button onClick={() => { moderation.onReject(report.id); onClose(); }} className="flex-1 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                style={{ background: "rgba(220,38,38,0.1)", color: "#dc2626" }}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="#dc2626" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                Reject
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -408,13 +468,15 @@ function NotificationPanel({ notifications, onClose, onDismiss }: { notification
 // Pannable Map
 // ─────────────────────────────────────────────────────────────────────────────
 function PannableMap({
-  pins, onPin, approvedReports, headerContent, belowMapContent, allowPin, pois = [],
+  pins, onPin, approvedReports, pendingReports = [], headerContent, belowMapContent, allowPin, pois = [],
   onReportPinTap, pinpointMode, notifCount = 0, onNotifOpen, onPinpointToggle, mapUrl = null,
 }: {
   mapUrl?: string | null;
   pins: Pin[];
   onPin?: (p: Pin) => void;
   approvedReports: Report[];
+  // Moderator maps only: reports awaiting review, drawn as "?" pins.
+  pendingReports?: Report[];
   headerContent: React.ReactNode;
   belowMapContent: React.ReactNode;
   allowPin: boolean;
@@ -587,6 +649,31 @@ function PannableMap({
                   </span>
                 </div>
                 <div className="w-0 h-0" style={{ borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: `6px solid ${r.priority === "critical" ? "#dc2626" : r.priority === "high" ? "#ea580c" : r.priority === "medium" ? "#d97706" : "#16a34a"}` }} />
+              </div>
+            </div>
+          ))}
+
+          {/* Reports awaiting review (moderators only). After the live pins so
+              they draw above them; same anchoring and counter-scale. */}
+          {pendingReports.map((r) => (
+            <div key={r.id}
+              className="absolute"
+              style={{
+                left: `${r.pinX}%`, top: `${r.pinY}%`,
+                transform: `translate(-50%, -100%) scale(${1 / scale})`,
+                transformOrigin: "50% 100%",
+                pointerEvents: !allowPin && onReportPinTap ? "auto" : "none",
+                cursor: !allowPin && onReportPinTap ? "pointer" : "default",
+              }}
+              onClick={(e) => { if (!allowPin && onReportPinTap) { e.stopPropagation(); onReportPinTap(r.id); } }}
+              aria-label="Report awaiting review"
+            >
+              <div className="flex flex-col items-center">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center"
+                  style={{ background: "rgba(75,85,99,0.5)", border: "2px dashed rgba(255,255,255,0.9)", boxShadow: "0 3px 9px rgba(31,41,55,0.25)", backdropFilter: "blur(2px)" }}>
+                  <span className="text-[10px] font-bold text-white">?</span>
+                </div>
+                <div className="w-0 h-0" style={{ borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "6px solid rgba(75,85,99,0.5)" }} />
               </div>
             </div>
           ))}
@@ -2087,7 +2174,12 @@ export default function App() {
   }, [staffReports]);
   const myTrustScore = activeMembership?.trustScore ?? trustScores[userName] ?? 60;
 
-  const selectedReport = selectedReportId !== null ? approvedReports.find((r) => r.id === selectedReportId) ?? null : null;
+  // Pending reports come ONLY from listForStaff, which the server returns to
+  // moderators alone; for attendees staffReports is always empty.
+  const pendingReviewReports = staffReports.filter(isAwaitingReview);
+  const selectedReport = selectedReportId !== null
+    ? approvedReports.find((r) => r.id === selectedReportId) ?? pendingReviewReports.find((r) => r.id === selectedReportId) ?? null
+    : null;
 
   /** Run a mutation, showing any server refusal in the existing error slot. */
   const run = async (fn: () => Promise<unknown>) => {
@@ -2396,7 +2488,7 @@ export default function App() {
             <SideNav items={staffNav.filter((i) => i.id !== "reports")} active={staffTab} onChange={setStaffTab} />
             <div className="flex-1 flex flex-col min-h-0 relative sm:p-6 lg:p-0 lg:flex-none lg:aspect-[390/811.5]">
             {staffTab === "map" && (
-              <FramedMap mapUrl={mapUrl} pins={pins} onPin={(p) => { if (staffPinpointMode) setPins([p]); }} approvedReports={approvedReports} allowPin={staffPinpointMode} pois={pois}
+              <FramedMap mapUrl={mapUrl} pins={pins} onPin={(p) => { if (staffPinpointMode) setPins([p]); }} approvedReports={approvedReports} pendingReports={pendingReviewReports} allowPin={staffPinpointMode} pois={pois}
                 pinpointMode={staffPinpointMode}
                 onPinpointToggle={() => { setStaffPinpointMode((v) => !v); setPins([]); }}
                 onReportPinTap={(id) => { setSelectedReportId(id); }}
@@ -2570,7 +2662,8 @@ export default function App() {
             {showReport && <ReportModal onClose={() => { setShowReport(false); setPins([]); }} onSubmit={(desc) => handleReport(desc)} pin={pins[0] ?? null} />}
             {showLeave && <LeaveModal onConfirm={() => { void handleLeave(); }} onCancel={() => setShowLeave(false)} isOrganizer={role === "organizer"} />}
             {selectedReport && (
-              <ReportPinDetailSheet report={selectedReport} onClose={() => setSelectedReportId(null)} />
+              <ReportPinDetailSheet report={selectedReport} onClose={() => setSelectedReportId(null)}
+                moderation={{ onApprove: handleApprove, onReject: handleReject, onSetPriority: handleSetPriority, onSetCritical: handleSetCritical }} />
             )}
           </div>
         );

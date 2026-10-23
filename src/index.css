@@ -17,24 +17,31 @@ body {
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
-   PHONE ONLY. Nothing in this block applies at >=640px, so the centred
-   390x844 frame on desktop keeps the inline styles from App.tsx untouched and
-   renders pixel-identically. !important is required to beat those inline
-   styles; a media query cannot be expressed inline, which is why this lives
-   here rather than in the component.
-   640px is Tailwind's `sm`. Widest phone in CSS px is ~430; narrowest tablet
-   ~768 — so the gap is comfortable.
+   The app shell. PHONE (<640px) is the base case and is unchanged: the frame
+   is the full screen. dvh, not vh: vh counts the collapsing URL bar, which
+   would push the bottom nav off-screen. From 640px (Tailwind's `sm`) the
+   frame fills the window instead of being a centred 390x844 mockup; html,
+   body and #root get a height only there, so the phone's dvh frame is never
+   centred inside a taller vh box.
+   640px: widest phone in CSS px is ~430; narrowest tablet ~768 — the gap is
+   comfortable.
    ─────────────────────────────────────────────────────────────────────────── */
-@media (max-width: 639px) {
-  .app-frame {
-    width: 100vw !important;
-    /* dvh, not vh: vh counts the collapsing URL bar, which would push the
-       bottom nav off-screen. */
-    height: 100dvh !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-  }
+.app-frame {
+  width: 100vw;
+  height: 100dvh;
+}
 
+@media (min-width: 640px) {
+  html, body, #root {
+    height: 100%;
+  }
+  .app-frame {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+@media (max-width: 639px) {
   /* Full-bleed puts the nav against the physical screen edge, where the home
      indicator lives. Lift it by the inset (0 on phones without one). */
   .island-nav {

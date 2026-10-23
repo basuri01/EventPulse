@@ -250,8 +250,8 @@ function QRCodeSVG({ value }: { value: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function ReportPinDetailSheet({ report, onClose }: { report: Report; onClose: () => void }) {
   return (
-    <div className="absolute inset-0 z-50 flex items-end" style={{ background: "rgba(26,25,23,0.4)", backdropFilter: "blur(5px)" }} onClick={onClose}>
-      <div className="w-full p-5 pb-8" style={{ background: "#faf8f5", borderRadius: "28px 28px 0 0", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
+    <div className="absolute inset-0 z-50 flex items-end sm:items-center sm:justify-center" style={{ background: "rgba(26,25,23,0.4)", backdropFilter: "blur(5px)" }} onClick={onClose}>
+      <div className="w-full p-5 pb-8 rounded-t-[28px] sm:rounded-[28px] sm:max-w-[480px]" style={{ background: "#faf8f5", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             {report.priority && (
@@ -295,8 +295,8 @@ function ReportPinDetailSheet({ report, onClose }: { report: Report; onClose: ()
 function CriticalStatementModal({ report, onClose, onConfirm }: { report: Report; onClose: () => void; onConfirm: (statement: string) => void }) {
   const [statement, setStatement] = useState("");
   return (
-    <div className="absolute inset-0 z-50 flex items-end" style={{ background: "rgba(26,25,23,0.5)", backdropFilter: "blur(6px)" }} onClick={onClose}>
-      <div className="w-full p-5 pb-8" style={{ background: "#faf8f5", borderRadius: "28px 28px 0 0", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
+    <div className="absolute inset-0 z-50 flex items-end sm:items-center sm:justify-center" style={{ background: "rgba(26,25,23,0.5)", backdropFilter: "blur(6px)" }} onClick={onClose}>
+      <div className="w-full p-5 pb-8 rounded-t-[28px] sm:rounded-[28px] sm:max-w-[480px]" style={{ background: "#faf8f5", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "rgba(220,38,38,0.1)" }}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -340,9 +340,9 @@ function CriticalStatementModal({ report, onClose, onConfirm }: { report: Report
 // ─────────────────────────────────────────────────────────────────────────────
 function NotificationPanel({ notifications, onClose, onDismiss }: { notifications: AppNotification[]; onClose: () => void; onDismiss: (id: string) => void }) {
   return (
-    <div className="absolute inset-0 z-50 flex flex-col" style={{ background: "rgba(26,25,23,0.45)", backdropFilter: "blur(6px)" }} onClick={onClose}>
-      <div className="flex-1" />
-      <div className="w-full flex flex-col" style={{ background: "#faf8f5", borderRadius: "28px 28px 0 0", border: `1px solid ${border}`, maxHeight: "70%" }} onClick={(e) => e.stopPropagation()}>
+    <div className="absolute inset-0 z-50 flex flex-col sm:items-center sm:justify-center" style={{ background: "rgba(26,25,23,0.45)", backdropFilter: "blur(6px)" }} onClick={onClose}>
+      <div className="flex-1 sm:flex-none" />
+      <div className="w-full flex flex-col rounded-t-[28px] sm:rounded-[28px] sm:max-w-[480px]" style={{ background: "#faf8f5", border: `1px solid ${border}`, maxHeight: "70%" }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0">
           <div>
             <p className="font-bold text-base" style={{ color: ink }}>Alerts</p>
@@ -403,6 +403,9 @@ function PannableMap({
   const [scale, setScale] = useState(1);
   const drag = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
   const pinchRef = useRef<{ dist: number; scale: number } | null>(null);
+  // Mirror of `scale` for the native wheel listener below, which is attached once.
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
 
   const clampOffset = useCallback((x: number, y: number, s: number) => {
     const el = containerRef.current;
@@ -490,6 +493,25 @@ function PannableMap({
 
   const zoomIn  = () => { const s = Math.min(4, scale * 1.3); setScale(s); setOffset((o) => clampOffset(o.x, o.y, s)); };
   const zoomOut = () => { const s = Math.max(0.4, scale / 1.3); setScale(s); setOffset((o) => clampOffset(o.x, o.y, s)); };
+
+  // Wheel and trackpad-pinch zoom about the centre, through the same
+  // setScale/clampOffset path as the buttons. Attached natively and
+  // non-passive: React registers wheel listeners as passive, so a
+  // preventDefault there is ignored and a trackpad pinch (ctrl+wheel) would
+  // zoom the whole page instead of the map.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002));
+      const s = Math.max(0.4, Math.min(4, scaleRef.current * factor));
+      setScale(s);
+      setOffset((o) => clampOffset(o.x, o.y, s));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [clampOffset]);
 
   return (
     <div className="relative flex-1 overflow-hidden" style={{ background: cream }}>
@@ -631,6 +653,22 @@ function PannableMap({
 
       {/* Below-map content (hint / report button) */}
       {belowMapContent}
+    </div>
+  );
+}
+
+/**
+ * PannableMap inside the box that sizes it. On phone the box is a plain flex
+ * column, so the map fills the workspace exactly as before. From 640px the box
+ * keeps the PHONE's map proportions (390:811.5, measured in the DOM at
+ * 390x844) at the largest size that fits, centred. Pins are percentages of a
+ * layer whose shape follows this box, so this is what keeps a pin on the same
+ * spot of the image on every device. PannableMap itself is untouched.
+ */
+function FramedMap(props: React.ComponentProps<typeof PannableMap>) {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 relative sm:flex-none sm:h-full sm:w-auto sm:max-w-full sm:mx-auto sm:aspect-[390/811.5] sm:rounded-[28px] sm:overflow-hidden sm:shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_40px_80px_rgba(0,0,0,0.25)]">
+      <PannableMap {...props} />
     </div>
   );
 }
@@ -1365,8 +1403,8 @@ function MyReportsSheet({ reports, userName, onClose }: { reports: Report[]; use
   // name never see each other's reports here.
   const mine = reports.filter((r) => r.isMine || r.author === userName);
   return (
-    <div className="absolute inset-0 z-50 flex items-end" style={{ background: "rgba(26,25,23,0.4)", backdropFilter: "blur(5px)" }} onClick={onClose}>
-      <div className="w-full flex flex-col" style={{ background: "#faf8f5", borderRadius: "28px 28px 0 0", border: `1px solid ${border}`, maxHeight: "75%" }} onClick={(e) => e.stopPropagation()}>
+    <div className="absolute inset-0 z-50 flex items-end sm:items-center sm:justify-center" style={{ background: "rgba(26,25,23,0.4)", backdropFilter: "blur(5px)" }} onClick={onClose}>
+      <div className="w-full flex flex-col rounded-t-[28px] sm:rounded-[28px] sm:max-w-[480px]" style={{ background: "#faf8f5", border: `1px solid ${border}`, maxHeight: "75%" }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0">
           <div>
             <p className="font-bold text-base" style={{ color: ink }}>My Reports</p>
@@ -1615,8 +1653,8 @@ function ReportModal({ onClose, onSubmit, pin }: { onClose: () => void; onSubmit
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-end" style={{ background: "rgba(26,25,23,0.45)", backdropFilter: "blur(6px)" }} onClick={onClose}>
-      <div className="w-full p-6 pb-8" style={{ background: "#faf8f5", borderRadius: "28px 28px 0 0", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
+    <div className="absolute inset-0 z-50 flex items-end sm:items-center sm:justify-center" style={{ background: "rgba(26,25,23,0.45)", backdropFilter: "blur(6px)" }} onClick={onClose}>
+      <div className="w-full p-6 pb-8 rounded-t-[28px] sm:rounded-[28px] sm:max-w-[480px]" style={{ background: "#faf8f5", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
         {submitted ? (
           <div className="flex flex-col items-center gap-3 py-6">
             <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: failure ? "rgba(220,38,38,0.1)" : "#dcfce7" }}>
@@ -1656,8 +1694,8 @@ function ReportModal({ onClose, onSubmit, pin }: { onClose: () => void; onSubmit
 // ─────────────────────────────────────────────────────────────────────────────
 function LeaveModal({ onConfirm, onCancel, isOrganizer = false }: { onConfirm: () => void; onCancel: () => void; isOrganizer?: boolean }) {
   return (
-    <div className="absolute inset-0 z-50 flex items-end" style={{ background: "rgba(26,25,23,0.45)", backdropFilter: "blur(6px)" }} onClick={onCancel}>
-      <div className="w-full p-6 pb-8" style={{ background: "#faf8f5", borderRadius: "28px 28px 0 0", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
+    <div className="absolute inset-0 z-50 flex items-end sm:items-center sm:justify-center" style={{ background: "rgba(26,25,23,0.45)", backdropFilter: "blur(6px)" }} onClick={onCancel}>
+      <div className="w-full p-6 pb-8 rounded-t-[28px] sm:rounded-[28px] sm:max-w-[480px]" style={{ background: "#faf8f5", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "rgba(239,68,68,0.1)" }}>
             <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
@@ -1697,6 +1735,29 @@ function IslandNav<T extends string>({ items, active, onChange }: { items: { id:
   );
 }
 
+/**
+ * Laptop-only (>=1024px) counterpart of IslandNav: the same items, icons and
+ * dark pill, stacked down the left edge. Never rendered on phone or tablet,
+ * where IslandNav stays.
+ */
+function SideNav<T extends string>({ items, active, onChange }: { items: { id: T; label: string; icon: (a: boolean) => React.ReactNode }[]; active: T; onChange: (id: T) => void }) {
+  return (
+    <div className="hidden lg:flex lg:flex-col lg:items-center lg:justify-center lg:shrink-0 lg:w-[72px]">
+      <div className="flex flex-col items-center gap-1 px-2.5 py-3"
+        style={{ background: "rgba(26,25,23,0.92)", backdropFilter: "blur(20px)", borderRadius: 999, boxShadow: "0 8px 32px rgba(0,0,0,0.28), 0 0 0 1px rgba(255,255,255,0.08)" }}>
+        {items.map(({ id, label, icon }) => (
+          <button key={id} onClick={() => onChange(id)}
+            className="flex flex-col items-center gap-0.5 transition-all active:scale-90 py-2 px-2 rounded-full w-12"
+            style={{ background: active === id ? "rgba(91,63,248,0.18)" : "transparent" }}>
+            {icon(active === id)}
+            <span className="text-[9px] font-mono" style={{ color: active === id ? "#8b74fc" : "#6b6456" }}>{label.toUpperCase()}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POI Modal
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1713,8 +1774,8 @@ function POIModal({ onClose, onAdd, pin }: { onClose: () => void; onAdd: (emoji:
   const [label, setLabel] = useState("");
   const submit = () => { if (label.trim()) { onAdd(emoji, label.trim()); } };
   return (
-    <div className="absolute inset-0 z-50 flex items-end" style={{ background: "rgba(26,25,23,0.45)", backdropFilter: "blur(6px)" }} onClick={onClose}>
-      <div className="w-full p-5 pb-8" style={{ background: "#faf8f5", borderRadius: "28px 28px 0 0", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
+    <div className="absolute inset-0 z-50 flex items-end sm:items-center sm:justify-center" style={{ background: "rgba(26,25,23,0.45)", backdropFilter: "blur(6px)" }} onClick={onClose}>
+      <div className="w-full p-5 pb-8 rounded-t-[28px] sm:rounded-[28px] sm:max-w-[480px]" style={{ background: "#faf8f5", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <p className="font-bold text-lg" style={{ color: ink }}>Add Point of Interest</p>
           <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center text-sm" style={{ background: "#edeae4", color: "#6b6456" }}>✕</button>
@@ -2123,10 +2184,19 @@ export default function App() {
 
       case "app":
         return (
-          <>
+          // Workspace layout. On phone the wrapper and the centre column are
+          // the same flex column the workspace always lived in, so nothing
+          // moves. From 640px the centre column pads the phone-shaped map;
+          // from 1024px a side nav and a live-feed panel flank it. On laptop
+          // the centre column takes the map's phone proportions, so it is
+          // exactly as wide as the map, and the panel fills the rest of the
+          // row up to 720px for readability, sitting right beside the map.
+          <div className="flex-1 flex flex-col min-h-0 relative lg:flex-row lg:gap-6 lg:p-6">
+            <SideNav items={attendeeNav.filter((i) => i.id !== "feed")} active={tab} onChange={(t) => { setTab(t); if (t !== "map") setPinpointMode(false); }} />
+            <div className="flex-1 flex flex-col min-h-0 relative sm:p-6 lg:p-0 lg:flex-none lg:aspect-[390/811.5]">
             {tab === "map" && (
               <>
-                <PannableMap
+                <FramedMap
                   mapUrl={mapUrl}
                   pins={pins}
                   onPin={(p) => { if (pinpointMode) setPins([p]); }}
@@ -2183,6 +2253,24 @@ export default function App() {
               </>
             )}
             {tab === "feed" && (
+              <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto">
+                <FeedView
+                  reports={reports}
+                  onView={handleView}
+                  trustScores={trustScores}
+                  seenIds={seenIds}
+                  notifications={notifications}
+                  error={actionError}
+                />
+              </div>
+            )}
+            {tab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto"><YouView role={role} name={userName} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
+            <div className="contents lg:hidden">
+              <IslandNav items={attendeeNav} active={tab} onChange={(t) => { setTab(t); if (t !== "map") setPinpointMode(false); }} />
+            </div>
+            </div>
+            {/* Laptop right panel: the live feed, always visible. */}
+            <aside className="hidden lg:flex lg:flex-col lg:flex-1 lg:min-w-0 lg:max-w-[720px] lg:min-h-0 lg:rounded-[28px] lg:overflow-hidden lg:bg-[#f5f1ea] lg:shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_40px_80px_rgba(0,0,0,0.25)]">
               <FeedView
                 reports={reports}
                 onView={handleView}
@@ -2191,9 +2279,7 @@ export default function App() {
                 notifications={notifications}
                 error={actionError}
               />
-            )}
-            {tab === "you" && <YouView role={role} name={userName} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} />}
-            <IslandNav items={attendeeNav} active={tab} onChange={(t) => { setTab(t); if (t !== "map") setPinpointMode(false); }} />
+            </aside>
             {showReport && <ReportModal onClose={() => { setShowReport(false); setPins([]); setPinpointMode(false); }} onSubmit={(desc) => handleReport(desc)} pin={pins[0] ?? null} />}
             {showLeave && <LeaveModal onConfirm={() => { void handleLeave(); }} onCancel={() => setShowLeave(false)} isOrganizer={role === "organizer"} />}
             {selectedReport && (
@@ -2206,14 +2292,18 @@ export default function App() {
                 onDismiss={(id) => setDismissedNotifs((d) => new Set([...d, id]))}
               />
             )}
-          </>
+          </div>
         );
 
       case "staff-app":
         return (
-          <>
+          // Same shell as the attendee workspace; the laptop panel is the
+          // reports queue.
+          <div className="flex-1 flex flex-col min-h-0 relative lg:flex-row lg:gap-6 lg:p-6">
+            <SideNav items={staffNav.filter((i) => i.id !== "reports")} active={staffTab} onChange={setStaffTab} />
+            <div className="flex-1 flex flex-col min-h-0 relative sm:p-6 lg:p-0 lg:flex-none lg:aspect-[390/811.5]">
             {staffTab === "map" && (
-              <PannableMap mapUrl={mapUrl} pins={pins} onPin={(p) => { if (staffPinpointMode) setPins([p]); }} approvedReports={approvedReports} allowPin={staffPinpointMode} pois={pois}
+              <FramedMap mapUrl={mapUrl} pins={pins} onPin={(p) => { if (staffPinpointMode) setPins([p]); }} approvedReports={approvedReports} allowPin={staffPinpointMode} pois={pois}
                 pinpointMode={staffPinpointMode}
                 onPinpointToggle={() => { setStaffPinpointMode((v) => !v); setPins([]); }}
                 onReportPinTap={(id) => { setSelectedReportId(id); }}
@@ -2260,7 +2350,7 @@ export default function App() {
             )}
             {staffTab === "poi" && (
               <>
-                <PannableMap
+                <FramedMap
                   mapUrl={mapUrl}
                   pins={poiPin ? [poiPin] : []}
                   onPin={(p) => { setPoiPin(p); setPoiPinning(false); }}
@@ -2339,6 +2429,37 @@ export default function App() {
               </>
             )}
             {staffTab === "reports" && (
+              <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto">
+                <StaffReportsView
+                  reports={staffReports}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
+                  onBan={handleBan}
+                  onSetPriority={handleSetPriority}
+                  onSetCritical={handleSetCritical}
+                  error={actionError}
+                />
+              </div>
+            )}
+            {staffTab === "feed" && (
+              <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto">
+                <FeedView
+                  reports={reports}
+                  onView={handleView}
+                  trustScores={trustScores}
+                  onResolve={handleResolve}
+                  showSeen={false}
+                  error={actionError}
+                />
+              </div>
+            )}
+            {staffTab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto"><YouView role={role} name={userName} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
+            <div className="contents lg:hidden">
+              <IslandNav items={staffNav} active={staffTab} onChange={setStaffTab} />
+            </div>
+            </div>
+            {/* Laptop right panel: the reports queue, always visible. */}
+            <aside className="hidden lg:flex lg:flex-col lg:flex-1 lg:min-w-0 lg:max-w-[720px] lg:min-h-0 lg:rounded-[28px] lg:overflow-hidden lg:bg-[#f5f1ea] lg:shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_40px_80px_rgba(0,0,0,0.25)]">
               <StaffReportsView
                 reports={staffReports}
                 onApprove={handleApprove}
@@ -2348,35 +2469,24 @@ export default function App() {
                 onSetCritical={handleSetCritical}
                 error={actionError}
               />
-            )}
-            {staffTab === "feed" && (
-              <FeedView
-                reports={reports}
-                onView={handleView}
-                trustScores={trustScores}
-                onResolve={handleResolve}
-                showSeen={false}
-                error={actionError}
-              />
-            )}
-            {staffTab === "you" && <YouView role={role} name={userName} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} />}
-            <IslandNav items={staffNav} active={staffTab} onChange={setStaffTab} />
+            </aside>
             {showReport && <ReportModal onClose={() => { setShowReport(false); setPins([]); }} onSubmit={(desc) => handleReport(desc)} pin={pins[0] ?? null} />}
             {showLeave && <LeaveModal onConfirm={() => { void handleLeave(); }} onCancel={() => setShowLeave(false)} isOrganizer={role === "organizer"} />}
             {selectedReport && (
               <ReportPinDetailSheet report={selectedReport} onClose={() => setSelectedReportId(null)} />
             )}
-          </>
+          </div>
         );
     }
   };
 
   return (
     <div className="w-full h-full flex items-center justify-center" style={{ background: bg }}>
-      {/* app-frame: styles below are the DESKTOP presentation and stay inline.
-          index.css overrides them only under @media (max-width:639px). */}
-      <div className="relative flex flex-col overflow-hidden app-frame"
-        style={{ width: "min(390px, 100vw)", height: "min(844px, 100vh)", borderRadius: "clamp(0px, 3vw, 44px)", boxShadow: "0 0 0 1px rgba(0,0,0,0.12), 0 40px 80px rgba(0,0,0,0.25)", background: cream }}>
+      {/* app-frame: sized by index.css -- the full screen on phone, the full
+          window from 640px. Always the `cream` token behind simple screens,
+          which sit straight on it. The two workspaces switch to the `bg`
+          token from 640px so their map and panel cards stand out. */}
+      <div className={`relative flex flex-col overflow-hidden app-frame ${screen === "app" || screen === "staff-app" ? "bg-[#f5f1ea] sm:bg-[#e8e4dc]" : "bg-[#f5f1ea]"}`}>
         {/* Critical statement modal — rendered at root so it's never clipped */}
         {criticalStatementFor && (
           <CriticalStatementModal
@@ -2398,7 +2508,21 @@ export default function App() {
               label is hidden on the login screen, whose own title names the app. */}
           {screen !== "login" && <span className="text-[11px] font-mono font-medium">EventPulse</span>}
         </div>
-        <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative">{renderContent()}</div>
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative">
+          {screen === "app" || screen === "staff-app" ? renderContent() : (
+            // Simple screens. On phone these two wrappers are transparent:
+            // the same flex column the screen always had. From 640px they
+            // centre the screen's content on the cream window in a column
+            // 560px wide (440px from 1024px) and up to 812px tall -- the phone
+            // frame's content height -- so every screen keeps its internal
+            // layout. No card: no radius, shadow or surround.
+            <div className="flex-1 flex flex-col min-h-0 sm:items-center sm:justify-center sm:p-6">
+              <div className="flex-1 flex flex-col min-h-0 w-full sm:flex-none sm:h-[812px] sm:max-h-full sm:max-w-[560px] lg:max-w-[440px]">
+                {renderContent()}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

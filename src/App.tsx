@@ -141,6 +141,14 @@ const PRIORITY_STYLE: Record<Priority, { bg: string; text: string; label: string
   medium:   { bg: "rgba(217,119,6,0.12)", text: "#d97706", label: "🟡 Medium" },
   low:      { bg: "rgba(22,163,74,0.12)", text: "#16a34a", label: "🟢 Low" },
 };
+// Attendee feed cards are tinted by priority. A report with no priority keeps
+// the neutral card: tinting it "low" would claim a triage that never happened.
+const PRIORITY_CARD_STYLE: Record<Priority, { bg: string; border: string }> = {
+  critical: { bg: "rgba(251,113,133,0.24)", border: "rgba(220,38,38,0.48)" },
+  high:     { bg: "rgba(255,237,213,0.72)", border: "rgba(234,88,12,0.4)" },
+  medium:   { bg: "rgba(254,243,199,0.72)", border: "rgba(217,119,6,0.4)" },
+  low:      { bg: "rgba(220,252,231,0.68)", border: "rgba(22,163,74,0.36)" },
+};
 
 const cream = "#f5f1ea", bg = "#e8e4dc", ink = "#1a1917", muted = "#8a7f6e";
 const dimmed = "#a09585", accent = "#5b3ff8", border = "rgba(0,0,0,0.08)";
@@ -1341,16 +1349,18 @@ function FeedView({ reports, onView, trustScores, onResolve, seenIds, showSeen =
         {approved.length === 0 ? (
           <div className="flex items-center justify-center py-16"><p className="text-sm" style={{ color: dimmed }}>No verified reports yet</p></div>
         ) : approved.map((item) => (
-          <div key={item.id} className="rounded-2xl p-4" style={{ background: card, border: `1px solid ${border}` }}>
+          <div key={item.id} className="rounded-2xl p-4"
+            style={showSeen && item.priority
+              ? { background: PRIORITY_CARD_STYLE[item.priority].bg, border: `1.5px solid ${PRIORITY_CARD_STYLE[item.priority].border}` }
+              : { background: card, border: `1px solid ${border}` }}>
             {item.priority && (
               <div className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold mb-2"
                 style={{ background: PRIORITY_STYLE[item.priority].bg, color: PRIORITY_STYLE[item.priority].text }}>
                 {PRIORITY_STYLE[item.priority].label}
               </div>
             )}
-            <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="flex items-start gap-2 mb-1">
               <span className="text-[11px] font-mono" style={{ color: muted }}>{item.location}</span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full shrink-0" style={{ background: "rgba(22,163,74,0.12)", color: "#15803d" }}>Verified</span>
             </div>
             <p className="text-sm font-semibold leading-snug" style={{ color: ink }}>{item.description}</p>
 

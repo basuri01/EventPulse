@@ -30,6 +30,10 @@ export default defineSchema({
     name: v.string(),
     venue: v.string(),
     date: v.string(),
+    // Last calendar day of the event, "YYYY-MM-DD". Absent means single-day,
+    // i.e. the same as `date`. An event is one continuous range from startTime
+    // to endTime, live overnight included.
+    endDate: v.optional(v.string()),
     // ms timestamps. Optional: events created before these existed have none.
     startTime: v.optional(v.number()),
     endTime: v.optional(v.number()),

@@ -23,6 +23,8 @@ interface POI { id: string; x: number; y: number; emoji: string; label: string; 
 
 interface EventData {
   name: string; venue: string; date: string;
+  // Last day of the event, "YYYY-MM-DD"; same as `date` for a single day.
+  endDate: string;
   // "HH:MM" as typed into the time inputs; converted to ms on submit.
   startTime: string; endTime: string;
   floorPlanUploaded: boolean; staff: string[];
@@ -758,9 +760,11 @@ function HomeScreen({ userName, onCreateEvent, onJoinEvent, onJoinAsStaff, onLog
 // Create Event steps
 // ─────────────────────────────────────────────────────────────────────────────
 function CreateStep1({ eventData, onChange, onNext, onBack }: { eventData: Partial<EventData>; onChange: (d: Partial<EventData>) => void; onNext: () => void; onBack: () => void }) {
-  // "HH:MM" strings compare correctly as text, so this is end-after-start.
-  const timesValid = !!(eventData.startTime && eventData.endTime && eventData.endTime > eventData.startTime);
-  const valid = !!(eventData.name?.trim() && eventData.venue?.trim() && eventData.date) && timesValid;
+  // "YYYY-MM-DDTHH:MM" strings compare correctly as text, so this is
+  // end-after-start across the whole range, overnight included.
+  const timesValid = !!(eventData.date && eventData.startTime && eventData.endDate && eventData.endTime)
+    && `${eventData.endDate}T${eventData.endTime}` > `${eventData.date}T${eventData.startTime}`;
+  const valid = !!(eventData.name?.trim() && eventData.venue?.trim()) && timesValid;
   return (
     <div className="flex-1 flex flex-col px-5 pt-4 pb-8 overflow-y-auto" style={{ background: cream }}>
       <BackBtn onBack={onBack} />
@@ -771,12 +775,18 @@ function CreateStep1({ eventData, onChange, onNext, onBack }: { eventData: Parti
       <div className="flex flex-col gap-4 flex-1">
         {[{ label: "Event Name", key: "name", placeholder: "Event Pulse '26", type: "text" },
           { label: "Venue", key: "venue", placeholder: "IIT Delhi, New Delhi", type: "text" },
-          { label: "Date", key: "date", placeholder: "", type: "date" },
+          { label: "Start Date", key: "date", placeholder: "", type: "date" },
           { label: "Start Time", key: "startTime", placeholder: "", type: "time" },
+          { label: "End Date", key: "endDate", placeholder: "", type: "date" },
           { label: "End Time", key: "endTime", placeholder: "", type: "time" }].map(({ label, key, placeholder, type }) => (
           <div key={key}>
             <label className="text-[10px] font-mono uppercase tracking-widest block mb-1.5" style={{ color: muted }}>{label}</label>
-            <input type={type} value={(eventData as Record<string, string>)[key] ?? ""} onChange={(e) => onChange({ ...eventData, [key]: e.target.value })}
+            <input type={type} value={(eventData as Record<string, string>)[key] ?? ""} onChange={(e) => {
+              const next = { ...eventData, [key]: e.target.value };
+              // Most events are one day: a blank end date follows the start date.
+              if (key === "date" && !eventData.endDate) next.endDate = e.target.value;
+              onChange(next);
+            }}
               placeholder={placeholder} className="w-full rounded-xl px-4 py-3.5 text-sm outline-none"
               style={{ background: card, border: `1px solid ${border}`, color: ink, fontFamily: "'Outfit', sans-serif" }} />
           </div>
@@ -1914,10 +1924,11 @@ export default function App() {
       // zone the organizer typed the times in. The server re-checks both land
       // on `date` in that same zone.
       const date = eventData.date ?? "";
+      const endDate = eventData.endDate || date;
       const created = await createEventMutation({
-        name: eventData.name ?? "", venue: eventData.venue ?? "", date,
+        name: eventData.name ?? "", venue: eventData.venue ?? "", date, endDate,
         startTime: new Date(`${date}T${eventData.startTime ?? ""}`).getTime(),
-        endTime: new Date(`${date}T${eventData.endTime ?? ""}`).getTime(),
+        endTime: new Date(`${endDate}T${eventData.endTime ?? ""}`).getTime(),
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       if (eventData.mapStorageId) {

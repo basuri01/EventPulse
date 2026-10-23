@@ -51,6 +51,9 @@ export const create = mutation({
     name: v.string(),
     venue: v.string(),
     date: v.string(),
+    // Optional so a client that predates multi-day events still creates
+    // single-day ones. Absent or blank means the event ends on `date`.
+    endDate: v.optional(v.string()),
     startTime: v.number(),
     endTime: v.number(),
     // IANA zone the organizer entered the times in, e.g. "Asia/Kolkata".
@@ -62,10 +65,11 @@ export const create = mutation({
     const name = args.name.trim();
     const venue = args.venue.trim();
     const date = args.date.trim();
+    const endDate = args.endDate?.trim() || undefined;
     if (!name) throw new Error("Event name is required.");
     if (!venue) throw new Error("Venue is required.");
     if (!date) throw new Error("Date is required.");
-    assertEventTimes({ date, startTime: args.startTime, endTime: args.endTime, timeZone: args.timeZone });
+    assertEventTimes({ date, endDate, startTime: args.startTime, endTime: args.endTime, timeZone: args.timeZone });
 
     const attendeeCode = await mintCode(ctx, ATTENDEE_CODE_LENGTH, []);
     const staffCode = await mintCode(ctx, STAFF_CODE_LENGTH, [attendeeCode]);
@@ -75,6 +79,7 @@ export const create = mutation({
       name,
       venue,
       date,
+      endDate,
       startTime: args.startTime,
       endTime: args.endTime,
       organizerId: userId,

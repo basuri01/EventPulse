@@ -1540,7 +1540,11 @@ function YouView({ role, name, email, onLeave, reports, trustScore, eventName, v
   return (
     <>
       <div className="flex-1 overflow-y-auto" style={{ background: cream }}>
-        <div className="px-4 pt-4 pb-32">
+        {/* 8rem clears the floating tab bar (about 83px with its offset) once
+            scrolled to the bottom. The tab bar is lifted by the safe-area inset
+            on notched phones, so the padding grows by the same inset; it is 0
+            elsewhere, so nothing moves on other screens. */}
+        <div className="px-4 pt-4" style={{ paddingBottom: "calc(8rem + env(safe-area-inset-bottom))" }}>
           <div className="rounded-3xl p-4 mb-5" style={{ background: "rgba(255,255,255,0.82)", border: `1px solid ${border}`, boxShadow: "0 6px 20px rgba(77,57,35,0.06)" }}>
             <div className="flex items-center gap-4">
               <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center text-xl font-bold shrink-0"
@@ -2353,7 +2357,7 @@ export default function App() {
                 />
               </div>
             )}
-            {tab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto"><YouView role={role} name={userName} email={viewer?.email ?? null} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
+            {tab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto lg:rounded-[28px] lg:overflow-hidden lg:shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_40px_80px_rgba(0,0,0,0.25)]"><YouView role={role} name={userName} email={viewer?.email ?? null} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
             <div className="contents lg:hidden">
               <IslandNav items={attendeeNav} active={tab} onChange={(t) => { setTab(t); if (t !== "map") setPinpointMode(false); }} />
             </div>
@@ -2546,7 +2550,7 @@ export default function App() {
                 />
               </div>
             )}
-            {staffTab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto"><YouView role={role} name={userName} email={viewer?.email ?? null} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
+            {staffTab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto lg:rounded-[28px] lg:overflow-hidden lg:shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_40px_80px_rgba(0,0,0,0.25)]"><YouView role={role} name={userName} email={viewer?.email ?? null} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
             <div className="contents lg:hidden">
               <IslandNav items={staffNav} active={staffTab} onChange={setStaffTab} />
             </div>

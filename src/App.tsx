@@ -1837,13 +1837,454 @@ function EventInfoView({ name, venue, date, endDate, startTime, endTime, descrip
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// You-tab menu rows and sheets
+// ─────────────────────────────────────────────────────────────────────────────
+function ProfileMenuRow({ label, icon, onClick }: { label: string; icon: React.ReactNode; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="w-full flex items-center gap-3 px-3.5 py-3.5 text-left active:bg-black/[0.02] transition-colors">
+      <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(91,63,248,0.08)", color: accent }}>{icon}</span>
+      <span className="flex-1 min-w-0 text-sm font-semibold" style={{ color: ink }}>{label}</span>
+      <svg className="shrink-0" width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M6 4.5L9.5 8 6 11.5" stroke={dimmed} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
+const MENU_ICON = {
+  events: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="4" width="13" height="11.5" rx="2.5" stroke="currentColor" strokeWidth="1.4" /><path d="M5.5 2.5v3M12.5 2.5v3M2.5 7.5h13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>,
+  staffManagement: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" strokeWidth="1.4" /><path d="M2 16c0-3 2.2-5.5 5-5.5S12 13 12 16M13 6.5h3M14.5 5v3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>,
+  codes: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="2.5" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="10.5" y="2.5" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="2.5" y="10.5" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><path d="M10.5 10.5h2.5v2.5h2.5v2.5h-5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>,
+  people: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="6" cy="6" r="2.5" stroke="currentColor" strokeWidth="1.4" /><circle cx="13" cy="7" r="2" stroke="currentColor" strokeWidth="1.4" /><path d="M1.5 16c0-3 2-5 4.5-5s4.5 2 4.5 5M10.5 12c2.5-.5 5 1 5.5 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>,
+  settings: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /><circle cx="7" cy="5" r="1.8" fill="#f7f3ff" stroke="currentColor" strokeWidth="1.3" /><circle cx="12" cy="9" r="1.8" fill="#f7f3ff" stroke="currentColor" strokeWidth="1.3" /><circle cx="6" cy="13" r="1.8" fill="#f7f3ff" stroke="currentColor" strokeWidth="1.3" /></svg>,
+  profile: <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 14l.8-3.2L12.6 3a1.4 1.4 0 012 2l-7.8 7.8L4 14z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /><path d="M11.5 4.2l2.3 2.3M3 16h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>,
+};
+
+const fieldStyle = { background: card, border: `1px solid ${border}`, color: ink, fontFamily: "'Outfit', sans-serif" };
+const fieldLabel = "text-[10px] font-mono uppercase tracking-widest block mb-1.5";
+
+/** The bottom sheet every You-tab dashboard uses (centred card from 640px, like My Reports). */
+function SheetFrame({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="absolute inset-0 z-50 flex items-end sm:items-center sm:justify-center" style={{ background: "rgba(26,25,23,0.42)", backdropFilter: "blur(5px)" }} onClick={onClose}>
+      <div role="dialog" aria-label={title} className="w-full flex flex-col rounded-t-[28px] sm:rounded-[28px] sm:max-w-[480px]" style={{ background: "#faf8f5", border: `1px solid ${border}`, maxHeight: "78%" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 shrink-0">
+          <div className="min-w-0">
+            <p className="font-bold text-lg" style={{ color: ink }}>{title}</p>
+            <p className="text-xs mt-0.5" style={{ color: muted }}>{subtitle}</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "#edeae4", color: "#6b6456" }}>✕</button>
+        </div>
+        <div className="overflow-y-auto px-5 pb-8">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
+
+function MemberAvatar({ name }: { name: string }) {
+  return <div className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{ background: "#e8e3f0", color: accent }}>{initialsOf(name)}</div>;
+}
+
+function SheetEmpty({ text }: { text: string }) {
+  return (
+    <div className="rounded-2xl py-10 text-center" style={{ background: card, border: `1px solid ${border}` }}>
+      <p className="text-sm" style={{ color: muted }}>{text}</p>
+    </div>
+  );
+}
+
+function SheetError({ text }: { text: string | null }) {
+  return text ? <p className="text-xs mt-3 text-center" style={{ color: "#dc2626" }}>{text}</p> : null;
+}
+
+/** A code in the design's tinted box. */
+function CodeBox({ label, code }: { label: string; code: string | null }) {
+  return (
+    <>
+      <p className="text-[10px] font-mono uppercase tracking-widest mb-1.5 text-center" style={{ color: muted }}>{label}</p>
+      <div className="w-full rounded-2xl px-4 py-3.5 text-center" style={{ background: "rgba(91,63,248,0.07)", border: "1px solid rgba(91,63,248,0.14)" }}>
+        <p className="font-mono text-lg font-bold tracking-[0.12em] break-all" style={{ color: accent }}>{code ?? "…"}</p>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Organizer: attendee QR + code and the staff code (no staff QR: staff join
+ * by typing the code). Staff: the attendee QR + code only.
+ */
+function AccessCodesSheet({ attendeeCode, staffCode, onClose }: { attendeeCode: string | null; staffCode: string | null; onClose: () => void }) {
+  const includeStaff = staffCode !== null;
+  const [type, setType] = useState<"attendee" | "staff">("attendee");
+  const active = includeStaff ? type : "attendee";
+  return (
+    <SheetFrame title={includeStaff ? "Event Access Codes" : "Attendee Access"} subtitle="Share the QR code or event code to grant access." onClose={onClose}>
+      {includeStaff && (
+        <div className="flex rounded-2xl p-1 mb-5" style={{ background: "rgba(0,0,0,0.06)" }}>
+          {(["attendee", "staff"] as const).map((t) => (
+            <button key={t} onClick={() => setType(t)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold capitalize transition-all"
+              style={{ background: type === t ? "white" : "transparent", color: type === t ? ink : muted, boxShadow: type === t ? "0 1px 4px rgba(0,0,0,0.1)" : "none" }}>
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-col items-center">
+        {active === "attendee" ? (
+          <>
+            <div className="p-4 rounded-3xl mb-4" style={{ background: "white", border: `1px solid ${border}`, boxShadow: "0 5px 18px rgba(77,57,35,0.07)" }}>
+              {attendeeCode ? <QRCodeSVG value={attendeeCode} /> : <div className="w-[112px] h-[112px]" />}
+            </div>
+            <CodeBox label="attendee event code" code={attendeeCode} />
+          </>
+        ) : (
+          <>
+            <CodeBox label="staff event code" code={staffCode} />
+            <p className="text-xs text-center mt-3 leading-relaxed" style={{ color: muted }}>Staff choose Staff on the role screen and enter this code. There is no staff QR code.</p>
+          </>
+        )}
+      </div>
+    </SheetFrame>
+  );
+}
+
+/** Two-tap remove: the first tap asks, the second removes. */
+function RemoveButton({ busy, onRemove }: { busy: boolean; onRemove: () => void }) {
+  const [armed, setArmed] = useState(false);
+  return (
+    <button onClick={() => { if (armed) onRemove(); else setArmed(true); }} onBlur={() => setArmed(false)} disabled={busy}
+      className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold shrink-0"
+      style={armed ? { background: "#dc2626", color: "white" } : { background: "rgba(220,38,38,0.08)", color: "#dc2626" }}>
+      {busy ? "Removing…" : armed ? "Confirm" : "Remove"}
+    </button>
+  );
+}
+
+/** Organizer: staff with emails, remove, and how to add more (share the staff code). */
+function StaffManagementSheet({ eventId, staffCode, onClose }: { eventId: Id<"events">; staffCode: string | null; onClose: () => void }) {
+  const staff = useQuery(api.memberships.listStaff, { eventId });
+  const removeStaff = useMutation(api.memberships.removeStaff);
+  const [busyId, setBusyId] = useState<Id<"memberships"> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const remove = async (membershipId: Id<"memberships">) => {
+    setBusyId(membershipId); setError(null);
+    try { await removeStaff({ membershipId }); } catch (err) { setError(errorMessage(err)); } finally { setBusyId(null); }
+  };
+  return (
+    <SheetFrame title="Staff Management" subtitle="Staff members and contact information" onClose={onClose}>
+      <div className="rounded-2xl p-4 mb-4" style={{ background: "rgba(91,63,248,0.04)", border: "1.5px dashed rgba(91,63,248,0.3)" }}>
+        <p className="text-sm font-semibold" style={{ color: ink }}>Add staff</p>
+        <p className="text-xs mt-1 leading-relaxed" style={{ color: muted }}>Share this staff code. They choose Staff on the role screen and enter it.</p>
+        <p className="font-mono text-lg font-bold tracking-[0.12em] mt-2 break-all" style={{ color: accent }}>{staffCode ?? "…"}</p>
+      </div>
+      <div className="flex flex-col gap-2">
+        {staff === undefined ? <SheetEmpty text="Loading…" />
+          : staff.length === 0 ? <SheetEmpty text="No staff have joined yet." />
+          : staff.map((m) => (
+            <div key={m.membershipId} className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: card, border: `1px solid ${border}` }}>
+              <MemberAvatar name={m.name} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate" style={{ color: ink }}>{m.name}</p>
+                {m.email && <p className="text-xs truncate mt-0.5" style={{ color: muted }}>{m.email}</p>}
+              </div>
+              <RemoveButton busy={busyId === m.membershipId} onRemove={() => { void remove(m.membershipId); }} />
+            </div>
+          ))}
+      </div>
+      <SheetError text={error} />
+    </SheetFrame>
+  );
+}
+
+/** Organizer: attendees with emails; remove = banned from rejoining. */
+function AttendeeManagementSheet({ eventId, onClose }: { eventId: Id<"events">; onClose: () => void }) {
+  const data = useQuery(api.memberships.listAttendees, { eventId });
+  const removeAttendee = useMutation(api.memberships.removeAttendee);
+  const [busyId, setBusyId] = useState<Id<"memberships"> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const remove = async (membershipId: Id<"memberships">) => {
+    setBusyId(membershipId); setError(null);
+    try { await removeAttendee({ membershipId }); } catch (err) { setError(errorMessage(err)); } finally { setBusyId(null); }
+  };
+  const attendees = data?.attendees;
+  return (
+    <SheetFrame title="Attendee Management" subtitle="Registered attendees and contact information" onClose={onClose}>
+      <p className="text-xs mb-3 leading-relaxed" style={{ color: muted }}>A removed attendee leaves the event and can't rejoin with the event code.</p>
+      <div className="flex flex-col gap-2">
+        {attendees === undefined ? <SheetEmpty text="Loading…" />
+          : attendees.length === 0 ? <SheetEmpty text="No attendees have joined yet." />
+          : attendees.map((m) => (
+            <div key={m.membershipId} className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: card, border: `1px solid ${border}` }}>
+              <MemberAvatar name={m.name} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate" style={{ color: ink }}>{m.name}</p>
+                {m.email && <p className="text-xs truncate mt-0.5" style={{ color: muted }}>{m.email}</p>}
+              </div>
+              <RemoveButton busy={busyId === m.membershipId} onRemove={() => { void remove(m.membershipId); }} />
+            </div>
+          ))}
+      </div>
+      {data?.capped && <p className="text-[11px] mt-3 text-center" style={{ color: dimmed }}>Showing the first {data.attendees.length} attendees.</p>}
+      <SheetError text={error} />
+    </SheetFrame>
+  );
+}
+
+/** Staff: the event's organizers and staff, names only. */
+function StaffNamesSheet({ eventId, onClose }: { eventId: Id<"events">; onClose: () => void }) {
+  const people = useQuery(api.memberships.listStaffNames, { eventId });
+  return (
+    <SheetFrame title="Staff List" subtitle={people ? `${people.length} ${people.length === 1 ? "person runs" : "people run"} this event` : "Organizers and staff"} onClose={onClose}>
+      <div className="flex flex-col gap-2">
+        {people === undefined ? <SheetEmpty text="Loading…" />
+          : people.map((m, i) => (
+            <div key={`${m.role}-${i}`} className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: card, border: `1px solid ${border}` }}>
+              <MemberAvatar name={m.name} />
+              <p className="flex-1 min-w-0 text-sm font-semibold truncate" style={{ color: ink }}>{m.name}</p>
+              <span className="text-[10px] font-mono px-2 py-1 rounded-lg shrink-0" style={{ background: "rgba(91,63,248,0.08)", color: accent }}>{m.role === "ORGANIZER" ? "Organizer" : "Staff"}</span>
+            </div>
+          ))}
+      </div>
+    </SheetFrame>
+  );
+}
+
+const MAX_NAME_CHARS = 60;
+
+/** Everyone: change the display name. The email comes from Google and is read-only. */
+function EditProfileSheet({ name, email, onClose }: { name: string; email: string | null; onClose: () => void }) {
+  const updateName = useMutation(api.users.updateName);
+  const [draft, setDraft] = useState(name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cleaned = draft.trim().replace(/\s+/g, " ");
+  const tooLong = cleaned.length > MAX_NAME_CHARS;
+  const valid = !!cleaned && !tooLong && cleaned !== name;
+  const save = async () => {
+    setBusy(true); setError(null);
+    try { await updateName({ name: draft }); onClose(); } catch (err) { setError(errorMessage(err)); } finally { setBusy(false); }
+  };
+  return (
+    <SheetFrame title="Edit Profile" subtitle="Update your personal information" onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        <div>
+          <label htmlFor="profile-name" className={fieldLabel} style={{ color: muted }}>Name</label>
+          <input id="profile-name" value={draft} onChange={(e) => { setDraft(e.target.value); setError(null); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && valid && !busy) void save(); }}
+            className="w-full rounded-xl px-4 py-3.5 text-sm outline-none" style={{ ...fieldStyle, border: `1px solid ${tooLong ? "rgba(220,38,38,0.4)" : border}` }} />
+          {tooLong && <p className="text-[11px] mt-1.5" style={{ color: "#dc2626" }}>Name must be {MAX_NAME_CHARS} characters or fewer.</p>}
+        </div>
+        <div>
+          <label htmlFor="profile-email" className={fieldLabel} style={{ color: muted }}>Email</label>
+          <input id="profile-email" type="email" value={email ?? ""} readOnly disabled
+            className="w-full rounded-xl px-4 py-3.5 text-sm outline-none" style={{ ...fieldStyle, color: muted, cursor: "not-allowed" }} />
+          <p className="text-[10px] mt-1.5 leading-relaxed" style={{ color: dimmed }}>Your email comes from your Google account and can't be changed here.</p>
+        </div>
+        <button onClick={() => { void save(); }} disabled={!valid || busy} className="w-full py-3.5 rounded-2xl font-semibold text-sm text-white"
+          style={{ background: accent, opacity: valid && !busy ? 1 : 0.4, cursor: valid && !busy ? "pointer" : "not-allowed" }}>{busy ? "Saving…" : "Save Changes"}</button>
+        <SheetError text={error} />
+      </div>
+    </SheetFrame>
+  );
+}
+
+/** Epoch ms -> the "YYYY-MM-DDTHH:MM" a datetime-local input shows, in this device's zone. */
+function toLocalInput(ms: number | null): string {
+  if (ms === null) return "";
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+interface EditableEvent {
+  _id: Id<"events">; name: string; venue: string; startTime: number | null; endTime: number | null;
+  description: string | null; mapUrl: string | null;
+}
+
+/** Organizer: edit the event's details, times, description and floor plan. */
+function EventSettingsSheet({ event, onClose }: { event: EditableEvent; onClose: () => void }) {
+  const updateEvent = useMutation(api.events.update);
+  const updateFloorMap = useMutation(api.events.updateFloorMap);
+  const generateUploadUrl = useMutation(api.files.generateUploadUrl);
+  const [name, setName] = useState(event.name);
+  const [venue, setVenue] = useState(event.venue);
+  const [start, setStart] = useState(toLocalInput(event.startTime));
+  const [end, setEnd] = useState(toLocalInput(event.endTime));
+  const [description, setDescription] = useState(event.description ?? "");
+  // A replacement floor plan is held locally and only uploaded on Save, so
+  // closing the sheet never leaves an unused file in storage.
+  const [newPlan, setNewPlan] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  useEffect(() => () => { if (newPlan) URL.revokeObjectURL(newPlan.previewUrl); }, [newPlan]);
+
+  const isDateTime = (v: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v);
+  const timesValid = isDateTime(start) && isDateTime(end) && end > start;
+  const words = description.match(/\S+/g)?.length ?? 0;
+  const tooManyWords = words > MAX_DESCRIPTION_WORDS;
+  const tooManyChars = description.length > MAX_DESCRIPTION_CHARS;
+  const valid = !!name.trim() && !!venue.trim() && timesValid && !tooManyWords && !tooManyChars;
+
+  const pickPlan = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setError("Choose an image file."); return; }
+    if (file.size > MAX_MAP_BYTES) { setError("Image must be 5 MB or smaller."); return; }
+    setError(null);
+    setNewPlan({ file, previewUrl: URL.createObjectURL(file) });
+  };
+
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      await updateEvent({
+        eventId: event._id, name, venue,
+        date: start.slice(0, 10), endDate: end.slice(0, 10),
+        startTime: new Date(start).getTime(), endTime: new Date(end).getTime(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        description,
+      });
+      if (newPlan) {
+        const { width, height } = await readImageSize(newPlan.previewUrl);
+        const uploadUrl = await generateUploadUrl();
+        const res = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": newPlan.file.type }, body: newPlan.file });
+        if (!res.ok) throw new Error("The details were saved, but the floor plan upload failed. Please try again.");
+        const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+        await updateFloorMap({ eventId: event._id, storageId, width, height });
+      }
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const planSrc = newPlan?.previewUrl ?? event.mapUrl;
+  return (
+    <SheetFrame title="Event Settings" subtitle="Update the active event details" onClose={onClose}>
+      <div className="flex flex-col gap-3.5">
+        {[{ label: "Event name", value: name, set: setName, id: "settings-name" }, { label: "Venue", value: venue, set: setVenue, id: "settings-venue" }].map((f) => (
+          <div key={f.id}>
+            <label htmlFor={f.id} className={fieldLabel} style={{ color: muted }}>{f.label}</label>
+            <input id={f.id} type="text" value={f.value} onChange={(e) => { f.set(e.target.value); setError(null); }}
+              className="w-full rounded-xl px-4 py-3 text-sm outline-none" style={fieldStyle} />
+          </div>
+        ))}
+        <div>
+          <label htmlFor="settings-start" className={fieldLabel} style={{ color: muted }}>Start date &amp; time</label>
+          <input id="settings-start" type="datetime-local" step={60} value={start} onChange={(e) => { setStart(e.target.value); setError(null); }}
+            className="w-full rounded-xl px-4 py-3 text-sm outline-none" style={fieldStyle} />
+        </div>
+        <div>
+          <label htmlFor="settings-end" className={fieldLabel} style={{ color: muted }}>End date &amp; time</label>
+          <input id="settings-end" type="datetime-local" step={60} value={end} min={start || undefined} onChange={(e) => { setEnd(e.target.value); setError(null); }}
+            className="w-full rounded-xl px-4 py-3 text-sm outline-none" style={{ ...fieldStyle, border: `1px solid ${start && end && !timesValid ? "rgba(220,38,38,0.4)" : border}` }} />
+          {start && end && !timesValid && <p className="text-[11px] mt-1.5" style={{ color: "#dc2626" }}>End time must be after the start time.</p>}
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label htmlFor="settings-description" className="text-[10px] font-mono uppercase tracking-widest" style={{ color: muted }}>Description</label>
+            <span className="text-[10px] font-mono" style={{ color: tooManyWords ? "#dc2626" : dimmed }}>{words} / 2000 words</span>
+          </div>
+          {/* Never truncated, as in the create flow: Save stays disabled until it fits. */}
+          <textarea id="settings-description" value={description} onChange={(e) => { setDescription(e.target.value); setError(null); }} rows={5}
+            className="w-full rounded-xl px-4 py-3 text-sm outline-none resize-none" style={fieldStyle} />
+          {tooManyWords ? <p className="text-[11px] mt-1.5" style={{ color: "#dc2626" }}>Description must be 2,000 words or fewer.</p>
+            : tooManyChars ? <p className="text-[11px] mt-1.5" style={{ color: "#dc2626" }}>Description must be 20,000 characters or fewer.</p> : null}
+        </div>
+        <div>
+          <p className={fieldLabel} style={{ color: muted }}>Floor plan</p>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={pickPlan} />
+          <div className="rounded-2xl overflow-hidden" style={{ background: card, border: `1px solid ${border}` }}>
+            {planSrc && <img src={planSrc} alt="Current event floor plan" className="w-full h-32 object-cover" />}
+            <div className="flex gap-2 p-3">
+              <button onClick={() => fileRef.current?.click()} className="flex-1 py-2.5 rounded-xl text-xs font-semibold" style={{ background: "rgba(91,63,248,0.09)", color: accent }}>
+                {planSrc ? "Replace image" : "Upload floor plan"}
+              </button>
+              {newPlan && (
+                <button onClick={() => setNewPlan(null)} className="px-4 py-2.5 rounded-xl text-xs font-semibold" style={{ background: "#edeae4", color: ink }}>Undo</button>
+              )}
+            </div>
+          </div>
+          {newPlan && <p className="text-[10px] mt-1.5" style={{ color: dimmed }}>The new floor plan is uploaded when you save.</p>}
+        </div>
+        <button onClick={() => { void save(); }} disabled={!valid || busy} className="w-full py-3.5 rounded-2xl font-semibold text-sm text-white"
+          style={{ background: accent, opacity: valid && !busy ? 1 : 0.4, cursor: valid && !busy ? "pointer" : "not-allowed" }}>{busy ? "Saving…" : "Save Event Changes"}</button>
+        <SheetError text={error} />
+      </div>
+    </SheetFrame>
+  );
+}
+
+/** Organizer: end the event for everyone. Nothing is deleted. */
+function EndEventModal({ eventName, busy, error, onConfirm, onCancel }: { eventName: string; busy: boolean; error: string | null; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="absolute inset-0 z-50 flex items-end sm:items-center sm:justify-center" style={{ background: "rgba(26,25,23,0.5)", backdropFilter: "blur(6px)" }} onClick={onCancel}>
+      <div role="dialog" aria-label="End this event?" className="w-full p-6 pb-8 rounded-t-[28px] sm:rounded-[28px] sm:max-w-[480px]" style={{ background: "#faf8f5", border: `1px solid ${border}` }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-col items-center gap-2 mb-6">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "rgba(127,29,29,0.1)" }}>
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+              <path d="M4 6h14M8 6V3.5h6V6M7 9v7M11 9v7M15 9v7M6 6l1 13h8l1-13" stroke="#991b1b" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <p className="font-bold text-lg" style={{ color: ink }}>End this event?</p>
+          <p className="text-sm text-center leading-relaxed" style={{ color: muted }}>
+            <span className="font-semibold" style={{ color: ink }}>{eventName}</span> will end for everyone. Attendees and staff can no longer open it, and its codes stop working. Its reports and history are kept, and it stays under Past in Your events.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onCancel} disabled={busy} className="flex-1 py-3.5 rounded-2xl font-semibold text-sm" style={{ background: "#edeae4", color: ink }}>Cancel</button>
+          <button onClick={onConfirm} disabled={busy} className="flex-1 py-3.5 rounded-2xl font-semibold text-sm text-white" style={{ background: "#991b1b", opacity: busy ? 0.6 : 1 }}>{busy ? "Ending…" : "End Event"}</button>
+        </div>
+        <SheetError text={error} />
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // You View
 // ─────────────────────────────────────────────────────────────────────────────
-function YouView({ role, name, email, onLeave, reports, trustScore, eventName, venue, date, joinedAt, reviewedToday }: {
+type YouEvent = EditableEvent & { attendeeCode: string | null; staffCode: string | null };
+type YouSheet = "staff-management" | "access" | "attendee-management" | "event-settings" | "staff-list" | "edit-profile";
+
+function YouView({ role, name, email, onLeave, reports, trustScore, eventName, venue, date, joinedAt, reviewedToday, event = null, onOpenEvents, onEndEvent }: {
   role: Role; name: string; email: string | null; onLeave: () => void; reports: Report[]; trustScore: number;
   eventName: string; venue: string; date: string; joinedAt: number | null; reviewedToday: number;
+  /** The active event (events.get). Codes are null where the server withholds them. */
+  event?: YouEvent | null;
+  onOpenEvents?: () => void;
+  /** Ends the event; resolves to an error message, or null once it has ended. */
+  onEndEvent?: () => Promise<string | null>;
 }) {
   const [showMyReports, setShowMyReports] = useState(false);
+  const [sheet, setSheet] = useState<YouSheet | null>(null);
+  const [showEnd, setShowEnd] = useState(false);
+  const [ending, setEnding] = useState(false);
+  const [endError, setEndError] = useState<string | null>(null);
+  const closeSheet = () => setSheet(null);
+  const managementRows = role === "organizer" ? [
+    { label: "My Events", icon: MENU_ICON.events, onClick: () => onOpenEvents?.() },
+    { label: "Staff Management", icon: MENU_ICON.staffManagement, onClick: () => setSheet("staff-management") },
+    { label: "Event Access Codes", icon: MENU_ICON.codes, onClick: () => setSheet("access") },
+    { label: "Attendee Management", icon: MENU_ICON.people, onClick: () => setSheet("attendee-management") },
+    { label: "Event Settings", icon: MENU_ICON.settings, onClick: () => setSheet("event-settings") },
+  ] : role === "staff" ? [
+    { label: "Staff List", icon: MENU_ICON.people, onClick: () => setSheet("staff-list") },
+    { label: "Attendee Access", icon: MENU_ICON.codes, onClick: () => setSheet("access") },
+  ] : [];
+  const confirmEnd = async () => {
+    if (!onEndEvent) return;
+    setEnding(true); setEndError(null);
+    const err = await onEndEvent();
+    // On success the workspace unmounts (we are taken to Your events).
+    if (err) { setEndError(err); setEnding(false); }
+  };
   const initials = name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
   const myReports = reports.filter((r) => r.isMine);
   const checkIn = joinedAt === null
@@ -1900,6 +2341,20 @@ function YouView({ role, name, email, onLeave, reports, trustScore, eventName, v
             </div>
           )}
 
+          {managementRows.length > 0 && (
+            <>
+              <p className="text-[10px] font-mono uppercase tracking-widest mb-2 px-1" style={{ color: muted }}>Event management</p>
+              <div className="rounded-3xl overflow-hidden mb-5" style={{ background: "rgba(255,255,255,0.78)", border: `1px solid ${border}` }}>
+                {managementRows.map((row, i) => (
+                  <div key={row.label}>
+                    {i > 0 && <div style={{ height: 1, background: border }} />}
+                    <ProfileMenuRow label={row.label} icon={row.icon} onClick={row.onClick} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
           <p className="text-[10px] font-mono uppercase tracking-widest mb-2 px-1" style={{ color: muted }}>Event details</p>
           <div className="rounded-3xl overflow-hidden mb-5" style={{ background: "rgba(255,255,255,0.78)", border: `1px solid ${border}` }}>
             {rows.map(({ label, value }, i) => (
@@ -1930,6 +2385,11 @@ function YouView({ role, name, email, onLeave, reports, trustScore, eventName, v
             )}
           </div>
 
+          <p className="text-[10px] font-mono uppercase tracking-widest mb-2 px-1" style={{ color: muted }}>Account &amp; preferences</p>
+          <div className="rounded-3xl overflow-hidden mb-5" style={{ background: "rgba(255,255,255,0.78)", border: `1px solid ${border}` }}>
+            <ProfileMenuRow label="Edit Profile" icon={MENU_ICON.profile} onClick={() => setSheet("edit-profile")} />
+          </div>
+
           <button onClick={onLeave}
             className="w-full py-4 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2"
             style={{ background: "rgba(239,68,68,0.08)", color: "#dc2626", border: "1px solid rgba(239,68,68,0.18)" }}>
@@ -1938,10 +2398,25 @@ function YouView({ role, name, email, onLeave, reports, trustScore, eventName, v
             </svg>
             Leave Event
           </button>
+          {role === "organizer" && onEndEvent && (
+            <button onClick={() => { setEndError(null); setShowEnd(true); }}
+              className="w-full mt-2.5 py-4 rounded-2xl font-semibold text-sm text-white flex items-center justify-center gap-2"
+              style={{ background: "#991b1b", boxShadow: "0 5px 14px rgba(153,27,27,0.2)" }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.5h4V4M5 6.5v5M8 6.5v5M11 6.5v5M4 4l.7 10h6.6L12 4" stroke="white" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              Delete Event
+            </button>
+          )}
         </div>
       </div>
 
       {showMyReports && <MyReportsSheet reports={reports} userName={name} onClose={() => setShowMyReports(false)} />}
+      {sheet === "edit-profile" && <EditProfileSheet name={name} email={email} onClose={closeSheet} />}
+      {event && sheet === "access" && <AccessCodesSheet attendeeCode={event.attendeeCode} staffCode={role === "organizer" ? event.staffCode : null} onClose={closeSheet} />}
+      {event && sheet === "staff-management" && <StaffManagementSheet eventId={event._id} staffCode={event.staffCode} onClose={closeSheet} />}
+      {event && sheet === "attendee-management" && <AttendeeManagementSheet eventId={event._id} onClose={closeSheet} />}
+      {event && sheet === "event-settings" && <EventSettingsSheet event={event} onClose={closeSheet} />}
+      {event && sheet === "staff-list" && <StaffNamesSheet eventId={event._id} onClose={closeSheet} />}
+      {showEnd && <EndEventModal eventName={eventName} busy={ending} error={endError} onConfirm={() => { void confirmEnd(); }} onCancel={() => { if (!ending) setShowEnd(false); }} />}
     </>
   );
 }
@@ -2292,6 +2767,7 @@ export default function App() {
   const joinByCodeMutation = useMutation(api.events.joinByCode);
   const leaveMutation = useMutation(api.memberships.leave);
   const openMembershipMutation = useMutation(api.memberships.open);
+  const endEventMutation = useMutation(api.events.end);
   const createReportMutation = useMutation(api.reports.create);
   const updateStatusMutation = useMutation(api.reports.updateStatus);
   const setPriorityMutation = useMutation(api.reports.setPriority);
@@ -2525,20 +3001,65 @@ export default function App() {
     }
   };
 
+  // Set while this tab itself leaves or ends the active event, so the guard
+  // below does not treat that as being removed.
+  const expectedExitRef = useRef(false);
+  const prevEventIdRef = useRef<Id<"events"> | null>(null);
+  const resetWorkspaceUi = () => {
+    setPins([]); setTab("map"); setStaffTab("map"); setShowLeave(false); setShowReport(false);
+    setPinpointMode(false); setStaffPinpointMode(false); setSelectedReportId(null);
+  };
+  // The active event is listMine[0]. If the event open in this workspace drops
+  // out of that list (the organizer ended it, or this user was removed), the
+  // first row silently becomes some OTHER membership -- possibly with another
+  // role. Send the user to the role picker with a message instead.
+  useEffect(() => {
+    const prev = prevEventIdRef.current;
+    prevEventIdRef.current = activeEventId;
+    if (!restored || memberships === undefined || expectedExitRef.current) return;
+    if (screen !== "app" && screen !== "staff-app") return;
+    if (prev !== null && prev !== activeEventId && !memberships.some((m) => m.eventId === prev)) {
+      resetWorkspaceUi();
+      setHomeError("That event is no longer available to you. It has ended, or you were removed from it.");
+      setScreen("home");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEventId, memberships, restored, screen]);
+
+  /** Organizer: end the active event for everyone, then show Your events. */
+  const handleEndEvent = async (): Promise<string | null> => {
+    if (!activeEventId) return "You are not in an event.";
+    expectedExitRef.current = true;
+    try {
+      await endEventMutation({ eventId: activeEventId });
+      resetWorkspaceUi();
+      setMyEventsError(null);
+      setScreen("my-events");
+      return null;
+    } catch (err) {
+      return errorMessage(err);
+    } finally {
+      expectedExitRef.current = false;
+    }
+  };
+
   const handleLeave = async () => {
     // An organizer cannot leave — that would orphan the event, its members and
     // its reports. Leave is the only route out of a workspace in this UI, so for
     // them it navigates Home and keeps the membership intact.
     if (role !== "organizer" && activeEventId) {
       try {
+        expectedExitRef.current = true;
         await leaveMutation({ eventId: activeEventId });
       } catch (err) {
+        expectedExitRef.current = false;
         // Keep the modal open rather than pretending the leave succeeded.
         console.error("Leaving the event failed:", err);
         return;
       }
     }
     setScreen("home"); setPins([]); setTab("map"); setStaffTab("map"); setShowLeave(false); setShowReport(false); setPinpointMode(false); setStaffPinpointMode(false);
+    expectedExitRef.current = false;
     setPendingRole("attendee");
     setEventData({ attendeeCode: MOCK_ATTENDEE_CODE, staffCode: MOCK_STAFF_CODE, staff: [] });
   };
@@ -2934,7 +3455,8 @@ export default function App() {
                 />
               </div>
             )}
-            {staffTab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto lg:rounded-[28px] lg:overflow-hidden lg:shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_40px_80px_rgba(0,0,0,0.25)]"><YouView role={role} name={userName} email={viewer?.email ?? null} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
+            {staffTab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto lg:rounded-[28px] lg:overflow-hidden lg:shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_40px_80px_rgba(0,0,0,0.25)]"><YouView role={role} name={userName} email={viewer?.email ?? null} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday}
+              event={activeEvent ?? null} onOpenEvents={() => { resetWorkspaceUi(); setMyEventsError(null); setScreen("my-events"); }} onEndEvent={handleEndEvent} /></div>}
             <div className="contents lg:hidden">
               <IslandNav items={staffNav} active={staffTab} onChange={setStaffTab} />
             </div>

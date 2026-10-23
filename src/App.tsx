@@ -18,7 +18,7 @@ import landingIllustration from "@/assets/landing-illustration.png";
 // ─────────────────────────────────────────────────────────────────────────────
 type Screen = "login" | "home" | "my-events" | "create-1" | "create-2" | "create-3" | "create-done" | "join-scan" | "staff-code" | "app" | "staff-app";
 type Role = "organizer" | "attendee" | "staff";
-type Tab = "map" | "feed" | "you";
+type Tab = "map" | "feed" | "info" | "you";
 type StaffTab = "map" | "poi" | "reports" | "feed" | "you";
 type Priority = "critical" | "high" | "medium" | "low";
 
@@ -1760,6 +1760,83 @@ function MyReportsSheet({ reports, userName, onClose }: { reports: Report[]; use
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Event Info (attendee)
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * The event's details for attendees: date tile, start-end range, venue and
+ * About. The description is rendered as plain text (React escapes it; never
+ * HTML) with its line breaks kept by `white-space: pre-wrap`.
+ */
+function EventInfoView({ name, venue, date, endDate, startTime, endTime, description }: EventTimes & {
+  name: string; venue: string; description: string | null;
+}) {
+  const fromDate = new Date(`${date}T00:00`);
+  const start = startTime !== null ? new Date(startTime) : (Number.isNaN(fromDate.getTime()) ? null : fromDate);
+  const month = start?.toLocaleDateString("en-US", { month: "short" }).toUpperCase() || "TBA";
+  const day = start?.getDate() || "—";
+  const fullDate = start?.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }) || "Date to be announced";
+  const time = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const shortDay = (d: Date) => d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  let range: string | null = null;
+  if (startTime !== null && endTime !== null) {
+    const s = new Date(startTime), f = new Date(endTime);
+    range = s.toDateString() === f.toDateString() ? `${time(s)} – ${time(f)}` : `${time(s)} → ${shortDay(f)}, ${time(f)}`;
+  } else if (endDate && endDate !== date) {
+    const f = new Date(`${endDate}T00:00`);
+    if (!Number.isNaN(f.getTime())) range = `Until ${shortDay(f)}`;
+  }
+  const about = description?.trim() ? description : "The organizer has not added an event description yet.";
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 pt-5 pb-32 lg:pb-8" style={{ background: cream }}>
+      <div className="relative overflow-hidden rounded-[28px] p-5 mb-5"
+        style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(250,246,255,0.95) 64%, rgba(236,224,255,0.96) 100%)", border: "1px solid rgba(91,63,248,0.08)", boxShadow: "0 10px 28px rgba(77,57,35,0.1)" }}>
+        <div className="absolute -right-14 -top-10 w-40 h-40 rounded-full" style={{ background: "rgba(139,92,246,0.08)" }} />
+        <div className="absolute -right-10 top-24 w-48 h-48 rounded-full" style={{ border: "34px solid rgba(139,92,246,0.09)" }} />
+        <div className="absolute right-20 top-28 w-10 h-10 rounded-full" style={{ background: "rgba(139,92,246,0.13)" }} />
+
+        <h2 className="relative text-[27px] leading-[1.08] font-bold mb-5 pr-4 break-words" style={{ color: ink, letterSpacing: "-0.04em" }}>
+          {name}
+        </h2>
+
+        <div className="relative flex items-center gap-3 mb-4">
+          <div className="w-[58px] h-[58px] rounded-2xl flex flex-col items-center justify-center shrink-0"
+            style={{ background: "linear-gradient(145deg, #eee6ff, #ddd0ff)" }}>
+            <span className="text-[10px] font-bold leading-none" style={{ color: accent }}>{month}</span>
+            <span className="text-[24px] font-bold leading-none mt-1" style={{ color: ink }}>{day}</span>
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold leading-snug" style={{ color: ink }}>{fullDate}</p>
+            {range && <p className="text-sm font-medium mt-1" style={{ color: "#7770aa" }}>{range}</p>}
+          </div>
+        </div>
+
+        <div className="relative flex items-center gap-3">
+          <div className="w-[58px] h-[58px] rounded-2xl flex items-center justify-center shrink-0"
+            style={{ background: "linear-gradient(145deg, #eee6ff, #ddd0ff)" }}>
+            <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+              <path d="M15 27s9-8 9-16A9 9 0 006 11c0 8 9 16 9 16z" fill={accent} />
+              <circle cx="15" cy="11" r="3.5" fill="#f8f5ff" />
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold leading-snug break-words" style={{ color: ink }}>{venue.trim() || "Venue to be announced"}</p>
+            <p className="text-xs mt-1" style={{ color: "#7770aa" }}>Event venue</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-[10px] font-mono uppercase tracking-widest mb-2 px-1" style={{ color: muted }}>About this event</p>
+        <div className="rounded-3xl p-5" style={{ background: "rgba(255,255,255,0.82)", border: `1px solid ${border}`, boxShadow: "0 5px 18px rgba(77,57,35,0.05)" }}>
+          <p className="text-sm leading-[1.7] whitespace-pre-wrap break-words" style={{ color: "#514b42" }}>{about}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // You View
 // ─────────────────────────────────────────────────────────────────────────────
 function YouView({ role, name, email, onLeave, reports, trustScore, eventName, venue, date, joinedAt, reviewedToday }: {
@@ -2163,6 +2240,7 @@ const mkIcon = (active: boolean, ac: string, children: React.ReactNode) =>
 const attendeeNav = [
   { id: "map" as Tab, label: "Map", icon: (a: boolean) => mkIcon(a, accent, <><path d="M9 2L3 5.5v14l6-3.5 8 3.5 6-3.5v-14l-6 3.5-8-3.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill={a ? "rgba(91,63,248,0.1)" : "none"} /><path d="M9 2v14.5M17 6v14" stroke="currentColor" strokeWidth="1.5" /></>) },
   { id: "feed" as Tab, label: "Feed", icon: (a: boolean) => mkIcon(a, accent, <><rect x="3" y="5" width="16" height="3" rx="1.5" fill="currentColor" /><rect x="3" y="10.5" width="11" height="2.5" rx="1.25" fill="currentColor" opacity={a ? 0.7 : 1} /><rect x="3" y="16" width="8" height="2.5" rx="1.25" fill="currentColor" opacity={a ? 0.4 : 0.7} /></>) },
+  { id: "info" as Tab, label: "Info", icon: (a: boolean) => mkIcon(a, accent, <><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.5" fill={a ? "rgba(91,63,248,0.1)" : "none"} /><path d="M11 10v5M11 7v.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></>) },
   { id: "you" as Tab, label: "You", icon: (a: boolean) => mkIcon(a, accent, <><circle cx="11" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5" fill={a ? "rgba(91,63,248,0.1)" : "none"} /><path d="M4 20c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></>) },
 ];
 
@@ -2662,6 +2740,7 @@ export default function App() {
                 />
               </div>
             )}
+            {tab === "info" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto lg:rounded-[28px] lg:overflow-hidden lg:shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_40px_80px_rgba(0,0,0,0.25)]"><EventInfoView name={eventName} venue={eventVenue} date={eventDate} endDate={activeEvent?.endDate ?? null} startTime={activeEvent?.startTime ?? null} endTime={activeEvent?.endTime ?? null} description={activeEvent?.description ?? null} /></div>}
             {tab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto lg:rounded-[28px] lg:overflow-hidden lg:shadow-[0_0_0_1px_rgba(0,0,0,0.12),0_40px_80px_rgba(0,0,0,0.25)]"><YouView role={role} name={userName} email={viewer?.email ?? null} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
             <div className="contents lg:hidden">
               <IslandNav items={attendeeNav} active={tab} onChange={(t) => { setTab(t); if (t !== "map") setPinpointMode(false); }} />

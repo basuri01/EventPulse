@@ -1,7 +1,11 @@
 [build]
-  # `npm run build` is `tsc -b && vite build`, so a type error fails the deploy
-  # rather than shipping a broken bundle.
-  command = "npm run build"
+  # `npx convex deploy` pushes convex/ to the PRODUCTION deployment chosen by
+  # CONVEX_DEPLOY_KEY (set in Netlify's environment), then runs the --cmd with
+  # VITE_CONVEX_URL and VITE_CONVEX_SITE_URL set to that deployment's URLs, so
+  # the bundle can only ever point at production. `npm run build` is
+  # `tsc -b && vite build`, so a type error fails the deploy rather than
+  # shipping a broken bundle.
+  command = "npx convex deploy --cmd 'npm run build'"
   publish = "dist"
 
 [build.environment]

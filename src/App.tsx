@@ -30,6 +30,8 @@ interface EventData {
   endDate: string;
   // "HH:MM" as typed into the time inputs; converted to ms on submit.
   startTime: string; endTime: string;
+  // Plain text; at most 2,000 words (and 20,000 characters, server-side).
+  description: string;
   floorPlanUploaded: boolean; staff: string[];
   attendeeCode: string; staffCode: string;
   // Set while the create wizard is in flight, before the event row exists.
@@ -73,6 +75,9 @@ interface AppNotification {
 const MOCK_ATTENDEE_CODE = "EP26-QR";
 const MOCK_STAFF_CODE = "STAFF-4821";
 const MAX_MAP_BYTES = 5 * 1024 * 1024;
+// Mirrors events.create; the server enforces both.
+const MAX_DESCRIPTION_WORDS = 2000;
+const MAX_DESCRIPTION_CHARS = 20000;
 
 /**
  * Convex surfaces a thrown Error whose message embeds the server-side text,
@@ -215,6 +220,20 @@ function GmailIcon() {
       <path d="M24 45c5.7 0 10.4-1.9 13.9-5.1l-6.6-5.2c-1.9 1.3-4.3 2-7.3 2-5.6 0-10.4-3.8-12.1-8.9H5v5.4C8.5 40.9 15.7 45 24 45z" fill="#34A853"/>
       <path d="M11.9 27.8c-.4-1.3-.7-2.7-.7-4.1s.3-2.8.7-4.1V14.2H5C3.5 17.1 2.7 20.4 2.7 24s.8 6.9 2.3 9.8l6.9-6z" fill="#FBBC05"/>
       <path d="M24 10.8c3.2 0 6 1.1 8.2 3.2l6.2-6.2C34.4 4.5 29.6 2.7 24 2.7 15.7 2.7 8.5 6.8 5 14.2l6.9 5.4c1.7-5.1 6.5-8.8 12.1-8.8z" fill="#EA4335"/>
+    </svg>
+  );
+}
+
+/** Location-pin glyph for the map's pinpoint button and its hint text. */
+function PinpointIcon({ color = "currentColor", size = 18 }: { color?: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M9 1.25a6.25 6.25 0 00-6.25 6.25C2.75 12.18 9 17 9 17s6.25-4.82 6.25-9.5A6.25 6.25 0 009 1.25zm0 3.5a2.75 2.75 0 100 5.5 2.75 2.75 0 000-5.5z"
+        fill={color}
+      />
     </svg>
   );
 }
@@ -613,11 +632,7 @@ function PannableMap({
             boxShadow: pinpointMode ? "0 4px 16px rgba(91,63,248,0.35)" : "0 2px 8px rgba(0,0,0,0.12)",
           }}
         >
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <circle cx="9" cy="7.5" r="3" stroke={pinpointMode ? "white" : accent} strokeWidth="1.5" />
-            <path d="M9 10.5v6" stroke={pinpointMode ? "white" : accent} strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M6.5 16.5h5" stroke={pinpointMode ? "white" : accent} strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
+          <PinpointIcon color={pinpointMode ? "white" : accent} size={19} />
         </button>
       )}
 
@@ -832,9 +847,23 @@ function HomeScreen({ userName, onCreateEvent, onJoinEvent, onJoinAsStaff, onLog
 function CreateStep1({ eventData, onChange, onNext, onBack }: { eventData: Partial<EventData>; onChange: (d: Partial<EventData>) => void; onNext: () => void; onBack: () => void }) {
   // "YYYY-MM-DDTHH:MM" strings compare correctly as text, so this is
   // end-after-start across the whole range, overnight included.
-  const timesValid = !!(eventData.date && eventData.startTime && eventData.endDate && eventData.endTime)
-    && `${eventData.endDate}T${eventData.endTime}` > `${eventData.date}T${eventData.startTime}`;
-  const valid = !!(eventData.name?.trim() && eventData.venue?.trim()) && timesValid;
+  const startValue = eventData.date && eventData.startTime ? `${eventData.date}T${eventData.startTime}` : "";
+  const endValue = eventData.endDate && eventData.endTime ? `${eventData.endDate}T${eventData.endTime}` : "";
+  const timesValid = !!(startValue && endValue) && endValue > startValue;
+  const description = eventData.description ?? "";
+  // Same count as the server: runs of non-whitespace.
+  const descriptionWords = description.match(/\S+/g)?.length ?? 0;
+  const tooManyWords = descriptionWords > MAX_DESCRIPTION_WORDS;
+  const tooManyChars = description.length > MAX_DESCRIPTION_CHARS;
+  const valid = !!(eventData.name?.trim() && eventData.venue?.trim() && description.trim())
+    && timesValid && !tooManyWords && !tooManyChars;
+  /**
+   * A datetime-local value is "YYYY-MM-DDTHH:MM" (no seconds at the default
+   * step of 60) or "" when cleared or incomplete. Split it into our stored
+   * date + "HH:MM" pair; anything else clears BOTH parts, never just one.
+   */
+  const splitDateTime = (value: string): [string, string] =>
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) ? [value.slice(0, 10), value.slice(11, 16)] : ["", ""];
   return (
     <div className="flex-1 flex flex-col px-5 pt-4 pb-8 overflow-y-auto" style={{ background: cream }}>
       <BackBtn onBack={onBack} />
@@ -844,23 +873,53 @@ function CreateStep1({ eventData, onChange, onNext, onBack }: { eventData: Parti
       </div>
       <div className="flex flex-col gap-4 flex-1">
         {[{ label: "Event Name", key: "name", placeholder: "Event Pulse '26", type: "text" },
-          { label: "Venue", key: "venue", placeholder: "IIT Delhi, New Delhi", type: "text" },
-          { label: "Start Date", key: "date", placeholder: "", type: "date" },
-          { label: "Start Time", key: "startTime", placeholder: "", type: "time" },
-          { label: "End Date", key: "endDate", placeholder: "", type: "date" },
-          { label: "End Time", key: "endTime", placeholder: "", type: "time" }].map(({ label, key, placeholder, type }) => (
+          { label: "Venue", key: "venue", placeholder: "IIT Delhi, New Delhi", type: "text" }].map(({ label, key, placeholder, type }) => (
           <div key={key}>
             <label className="text-[10px] font-mono uppercase tracking-widest block mb-1.5" style={{ color: muted }}>{label}</label>
-            <input type={type} value={(eventData as Record<string, string>)[key] ?? ""} onChange={(e) => {
-              const next = { ...eventData, [key]: e.target.value };
-              // Most events are one day: a blank end date follows the start date.
-              if (key === "date" && !eventData.endDate) next.endDate = e.target.value;
-              onChange(next);
-            }}
+            <input type={type} value={(eventData as Record<string, string>)[key] ?? ""} onChange={(e) => onChange({ ...eventData, [key]: e.target.value })}
               placeholder={placeholder} className="w-full rounded-xl px-4 py-3.5 text-sm outline-none"
               style={{ background: card, border: `1px solid ${border}`, color: ink, fontFamily: "'Outfit', sans-serif" }} />
           </div>
         ))}
+
+        <div>
+          <label className="text-[10px] font-mono uppercase tracking-widest block mb-1.5" style={{ color: muted }}>Start date &amp; time</label>
+          <input type="datetime-local" step={60} value={startValue}
+            onChange={(e) => { const [date, startTime] = splitDateTime(e.target.value); onChange({ ...eventData, date, startTime }); }}
+            className="w-full rounded-xl px-4 py-3.5 text-sm outline-none"
+            style={{ background: card, border: `1px solid ${border}`, color: ink, fontFamily: "'Outfit', sans-serif" }} />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-mono uppercase tracking-widest block mb-1.5" style={{ color: muted }}>End date &amp; time</label>
+          <input type="datetime-local" step={60} value={endValue} min={startValue || undefined}
+            onChange={(e) => { const [endDate, endTime] = splitDateTime(e.target.value); onChange({ ...eventData, endDate, endTime }); }}
+            className="w-full rounded-xl px-4 py-3.5 text-sm outline-none"
+            style={{ background: card, border: `1px solid ${startValue && endValue && !timesValid ? "rgba(220,38,38,0.4)" : border}`, color: ink, fontFamily: "'Outfit', sans-serif" }} />
+          {startValue && endValue && !timesValid && (
+            <p className="text-[11px] mt-1.5" style={{ color: "#dc2626" }}>End time must be after the start time.</p>
+          )}
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[10px] font-mono uppercase tracking-widest" style={{ color: muted }}>Event description</label>
+            <span className="text-[10px] font-mono" style={{ color: tooManyWords ? "#dc2626" : dimmed }}>{descriptionWords} / 2000 words</span>
+          </div>
+          {/* Never truncated: whatever is typed or pasted is kept, and Next stays
+              disabled until it is within the limits. */}
+          <textarea value={description} onChange={(e) => onChange({ ...eventData, description: e.target.value })}
+            placeholder="Tell attendees what the event is about, what to expect, and any important information."
+            rows={7} className="w-full rounded-xl px-4 py-3.5 text-sm outline-none resize-none"
+            style={{ background: card, border: `1px solid ${border}`, color: ink, fontFamily: "'Outfit', sans-serif" }} />
+          {tooManyWords ? (
+            <p className="text-[11px] mt-1.5" style={{ color: "#dc2626" }}>Description must be 2,000 words or fewer.</p>
+          ) : tooManyChars ? (
+            <p className="text-[11px] mt-1.5" style={{ color: "#dc2626" }}>Description must be 20,000 characters or fewer.</p>
+          ) : (
+            <p className="text-[10px] mt-1.5 leading-relaxed" style={{ color: dimmed }}>The description is limited to 2,000 words.</p>
+          )}
+        </div>
       </div>
       <button onClick={onNext} disabled={!valid} className="w-full py-4 rounded-2xl font-semibold text-sm text-white mt-6"
         style={{ background: accent, opacity: valid ? 1 : 0.4, cursor: valid ? "pointer" : "not-allowed" }}>Next: Upload Floor Plan</button>
@@ -2023,6 +2082,7 @@ export default function App() {
         startTime: new Date(`${date}T${eventData.startTime ?? ""}`).getTime(),
         endTime: new Date(`${endDate}T${eventData.endTime ?? ""}`).getTime(),
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        description: eventData.description ?? "",
       });
       if (eventData.mapStorageId) {
         await updateFloorMapMutation({
@@ -2220,7 +2280,11 @@ export default function App() {
                       {!pinpointMode && !pins.length && (
                         <div className="absolute left-4 right-4 pointer-events-none"
                           style={{ bottom: 92, background: "rgba(255,255,255,0.88)", backdropFilter: "blur(10px)", borderRadius: 14, padding: "10px 16px", border: `1px solid ${border}` }}>
-                          <p className="text-xs text-center font-medium" style={{ color: "#6b6456" }}>Tap a pin to view · use the 📍 button to report</p>
+                          <p className="text-xs text-center font-medium flex items-center justify-center gap-1" style={{ color: "#6b6456" }}>
+                          <span>Tap a pin to view · use the</span>
+                          <PinpointIcon color="#6b6456" size={13} />
+                          <span>button to report</span>
+                        </p>
                         </div>
                       )}
                       {pins.length > 0 && (
@@ -2317,7 +2381,11 @@ export default function App() {
                     {!staffPinpointMode && !pins.length && (
                       <div className="absolute left-4 right-4 pointer-events-none"
                         style={{ bottom: 100, background: "rgba(255,255,255,0.88)", backdropFilter: "blur(10px)", borderRadius: 14, padding: "8px 12px", border: `1px solid ${border}` }}>
-                        <p className="text-xs text-center font-medium" style={{ color: "#6b6456" }}>Tap a pin to view · use the 📍 button to report</p>
+                        <p className="text-xs text-center font-medium flex items-center justify-center gap-1" style={{ color: "#6b6456" }}>
+                          <span>Tap a pin to view · use the</span>
+                          <PinpointIcon color="#6b6456" size={13} />
+                          <span>button to report</span>
+                        </p>
                       </div>
                     )}
                     {pins.length > 0 && (

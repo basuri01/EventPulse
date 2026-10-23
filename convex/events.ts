@@ -9,6 +9,15 @@ const CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const ATTENDEE_CODE_LENGTH = 6;
 const STAFF_CODE_LENGTH = 8;
 const MAX_MAP_BYTES = 5 * 1024 * 1024;
+const MAX_DESCRIPTION_WORDS = 2000;
+// ~2,000 typical words is ~12,000 characters; this leaves room for long words
+// and URLs while keeping the field under ~80 KB even at 4 bytes per character.
+const MAX_DESCRIPTION_CHARS = 20000;
+
+/** Runs of non-whitespace -- the same count the create form shows. */
+function countWords(text: string): number {
+  return text.match(/\S+/g)?.length ?? 0;
+}
 
 function randomCode(length: number): string {
   const bytes = new Uint8Array(length);
@@ -58,6 +67,9 @@ export const create = mutation({
     endTime: v.number(),
     // IANA zone the organizer entered the times in, e.g. "Asia/Kolkata".
     timeZone: v.string(),
+    // Optional so a client that predates descriptions still creates events.
+    // Blank means none.
+    description: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
@@ -66,9 +78,18 @@ export const create = mutation({
     const venue = args.venue.trim();
     const date = args.date.trim();
     const endDate = args.endDate?.trim() || undefined;
+    const description = args.description?.trim() || undefined;
     if (!name) throw new Error("Event name is required.");
     if (!venue) throw new Error("Venue is required.");
     if (!date) throw new Error("Date is required.");
+    if (description !== undefined) {
+      if (description.length > MAX_DESCRIPTION_CHARS) {
+        throw new Error("Description must be 20,000 characters or fewer.");
+      }
+      if (countWords(description) > MAX_DESCRIPTION_WORDS) {
+        throw new Error("Description must be 2,000 words or fewer.");
+      }
+    }
     assertEventTimes({ date, endDate, startTime: args.startTime, endTime: args.endTime, timeZone: args.timeZone });
 
     const attendeeCode = await mintCode(ctx, ATTENDEE_CODE_LENGTH, []);
@@ -82,6 +103,7 @@ export const create = mutation({
       endDate,
       startTime: args.startTime,
       endTime: args.endTime,
+      description,
       organizerId: userId,
       attendeeCode,
       staffCode,
@@ -170,6 +192,7 @@ export const get = query({
       name: event.name,
       venue: event.venue,
       date: event.date,
+      description: event.description ?? null,
       isActive: event.isActive,
       mapWidth: event.mapWidth ?? null,
       mapHeight: event.mapHeight ?? null,

@@ -37,6 +37,9 @@ export default defineSchema({
     // ms timestamps. Optional: events created before these existed have none.
     startTime: v.optional(v.number()),
     endTime: v.optional(v.number()),
+    // Plain text, at most 2,000 words / 20,000 characters (events.create).
+    // Optional: events created before this existed have none.
+    description: v.optional(v.string()),
     organizerId: v.id("users"),
     attendeeCode: v.string(),
     staffCode: v.string(),

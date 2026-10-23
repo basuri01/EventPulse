@@ -9,6 +9,9 @@ import type { Id } from "../convex/_generated/dataModel";
 // 3200x1800. inferLocation's zone bands are measured off THIS file, so the two
 // must be changed together.
 import campusMap from "@/imports/iitd-campus-map.jpg.jpeg";
+// 665x595, opaque, background exactly the `cream` token so it sits flush on
+// the login screen.
+import landingIllustration from "@/assets/landing-illustration.png";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -635,37 +638,68 @@ function PannableMap({
 // ─────────────────────────────────────────────────────────────────────────────
 // Login
 // ─────────────────────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
+function LoginScreen({ onLogin }: { onLogin: () => Promise<unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Google sign-in navigates away. Coming back with the browser's Back button
+  // can restore this page from the back/forward cache with its React state
+  // intact, which would leave `busy` true and the button disabled for good.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) setBusy(false); };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
+  const login = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      // On success the browser is redirected to Google, so `busy` stays set.
+      await onLogin();
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="flex-1 flex flex-col items-center justify-between px-6 py-10" style={{ background: cream }}>
-      <div />
-      <div className="flex flex-col items-center gap-6 w-full">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-            style={{ background: `linear-gradient(135deg, ${accent} 0%, #8b74fc 100%)`, boxShadow: "0 8px 24px rgba(91,63,248,0.3)" }}>
-            <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
-              <circle cx="15" cy="15" r="10" stroke="white" strokeWidth="2" />
-              <path d="M15 8v7l4 4" stroke="white" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </div>
-          <div className="text-center">
-            <h1 className="text-2xl font-bold" style={{ color: ink, letterSpacing: "-0.02em" }}>Event Pulse</h1>
-            <p className="text-sm mt-1" style={{ color: muted }}>Smart event incident management</p>
-          </div>
+    <div className="flex-1 flex flex-col items-center px-6 pt-8 pb-8 min-h-0" style={{ background: cream }}>
+      <div className="flex flex-col items-center gap-3 shrink-0">
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+          style={{ background: `linear-gradient(135deg, ${accent} 0%, #8b74fc 100%)`, boxShadow: "0 8px 24px rgba(91,63,248,0.3)" }}>
+          <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+            <circle cx="15" cy="15" r="10" stroke="white" strokeWidth="2" />
+            <path d="M15 8v7l4 4" stroke="white" strokeWidth="2" strokeLinecap="round" />
+          </svg>
         </div>
-        <div className="w-full flex flex-col gap-3 mt-4">
-          <button onClick={onLogin}
-            className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-semibold text-sm"
-            style={{ background: "white", border: `1px solid ${border}`, color: ink, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
-            <GmailIcon />Continue with Google
-          </button>
+        <div className="text-center">
+          <h1 className="text-2xl font-bold" style={{ color: ink, letterSpacing: "-0.02em" }}>Event Pulse</h1>
+          <p className="text-sm mt-1" style={{ color: muted }}>Smart event incident management</p>
         </div>
-        <p className="text-[11px] text-center" style={{ color: dimmed }}>By continuing you agree to our Terms &amp; Privacy Policy</p>
       </div>
-      <div className="flex flex-col items-center gap-1">
-        <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: dimmed }}>Powered by</p>
-        <p className="text-xs font-semibold" style={{ color: muted }}>Event Pulse · 2026</p>
+      {/* Natural size when it fits; the only block allowed to shrink, so on a
+          short screen it gives way first and the button never leaves the
+          viewport. Leftover height goes to the spacer below the button, which
+          is where the design leaves its empty space. */}
+      <div className="min-h-0 w-full flex items-start justify-center mt-8" style={{ flex: "0 1 auto" }}>
+        <img src={landingIllustration}
+          alt="A phone showing a venue map with a location pin, surrounded by cards for crowd updates, events, live updates and live notifications"
+          className="w-full max-h-full object-contain" />
       </div>
+      <div className="w-full flex flex-col gap-3 shrink-0 mt-8">
+        <button onClick={() => { void login(); }} disabled={busy}
+          className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-semibold text-sm text-white"
+          style={{ background: accent, boxShadow: "0 8px 24px rgba(91,63,248,0.3)", opacity: busy ? 0.4 : 1, cursor: busy ? "not-allowed" : "pointer" }}>
+          {/* Google's branding wants the coloured G on white, so it sits in its own white disc. */}
+          <span className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: "white" }}>
+            <GmailIcon />
+          </span>
+          Continue with Google
+        </button>
+        {error && <p className="text-xs text-center" style={{ color: "#dc2626" }}>{error}</p>}
+      </div>
+      <div className="flex-1" />
     </div>
   );
 }
@@ -2046,7 +2080,7 @@ export default function App() {
     if ((screen === "app" || screen === "staff-app") && eventLoading) return <SplashScreen />;
     switch (screen) {
       case "login":
-        return <LoginScreen onLogin={() => { void signIn("google"); }} />;
+        return <LoginScreen onLogin={() => signIn("google")} />;
 
       case "home":
         return <HomeScreen userName={userName} onCreateEvent={() => setScreen("create-1")} onJoinEvent={() => setScreen("join-scan")} onJoinAsStaff={() => setScreen("staff-code")} onLogout={() => { void signOut(); }} />;
@@ -2360,7 +2394,9 @@ export default function App() {
             still applies. */}
         <div className="flex items-center justify-between px-6 pt-3 pb-1 z-20 relative shrink-0"
           style={{ color: "#6b6456", paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }}>
-          <span className="text-[11px] font-mono font-medium">EventPulse</span>
+          {/* The row stays on every screen for the notch inset; only the
+              label is hidden on the login screen, whose own title names the app. */}
+          {screen !== "login" && <span className="text-[11px] font-mono font-medium">EventPulse</span>}
         </div>
         <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative">{renderContent()}</div>
       </div>

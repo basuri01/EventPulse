@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireMembership, requireRole, requireUser } from "./lib/authz";
+import { assertEventTimes } from "./lib/time";
 
 /** Crockford-ish: no 0/O/1/I/L, so a code read aloud or off a screen is unambiguous. */
 const CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -46,7 +47,15 @@ async function mintCode(ctx: MutationCtx, length: number, taken: string[]): Prom
 }
 
 export const create = mutation({
-  args: { name: v.string(), venue: v.string(), date: v.string() },
+  args: {
+    name: v.string(),
+    venue: v.string(),
+    date: v.string(),
+    startTime: v.number(),
+    endTime: v.number(),
+    // IANA zone the organizer entered the times in, e.g. "Asia/Kolkata".
+    timeZone: v.string(),
+  },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
 
@@ -56,6 +65,7 @@ export const create = mutation({
     if (!name) throw new Error("Event name is required.");
     if (!venue) throw new Error("Venue is required.");
     if (!date) throw new Error("Date is required.");
+    assertEventTimes({ date, startTime: args.startTime, endTime: args.endTime, timeZone: args.timeZone });
 
     const attendeeCode = await mintCode(ctx, ATTENDEE_CODE_LENGTH, []);
     const staffCode = await mintCode(ctx, STAFF_CODE_LENGTH, [attendeeCode]);
@@ -65,6 +75,8 @@ export const create = mutation({
       name,
       venue,
       date,
+      startTime: args.startTime,
+      endTime: args.endTime,
       organizerId: userId,
       attendeeCode,
       staffCode,
@@ -73,6 +85,7 @@ export const create = mutation({
     });
 
     // The creator is the organizer. Role is written here, server-side, once.
+    // Creating an event opens it, so it becomes the active event.
     await ctx.db.insert("memberships", {
       eventId,
       userId,
@@ -80,6 +93,7 @@ export const create = mutation({
       isBanned: false,
       trustScore: 100,
       joinedAt: now,
+      lastOpenedAt: now,
     });
 
     return { eventId, attendeeCode, staffCode };

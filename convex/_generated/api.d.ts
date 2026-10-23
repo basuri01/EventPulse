@@ -14,6 +14,7 @@ import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_geo from "../lib/geo.js";
+import type * as lib_time from "../lib/time.js";
 import type * as mapPins from "../mapPins.js";
 import type * as memberships from "../memberships.js";
 import type * as reports from "../reports.js";
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/authz": typeof lib_authz;
   "lib/geo": typeof lib_geo;
+  "lib/time": typeof lib_time;
   mapPins: typeof mapPins;
   memberships: typeof memberships;
   reports: typeof reports;

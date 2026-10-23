@@ -30,6 +30,9 @@ export default defineSchema({
     name: v.string(),
     venue: v.string(),
     date: v.string(),
+    // ms timestamps. Optional: events created before these existed have none.
+    startTime: v.optional(v.number()),
+    endTime: v.optional(v.number()),
     organizerId: v.id("users"),
     attendeeCode: v.string(),
     staffCode: v.string(),
@@ -50,9 +53,15 @@ export default defineSchema({
     isBanned: v.boolean(),
     trustScore: v.number(),
     joinedAt: v.number(),
+    // When the member last opened this event. The newest one is the active
+    // event. Optional: memberships written before this field existed have none
+    // and sort after every membership that has one.
+    lastOpenedAt: v.optional(v.number()),
   })
     .index("by_event_user", ["eventId", "userId"])
-    .index("by_user", ["userId"]),
+    .index("by_event_role", ["eventId", "role"])
+    .index("by_user", ["userId"])
+    .index("by_user_lastOpenedAt", ["userId", "lastOpenedAt"]),
 
   reports: defineTable({
     eventId: v.id("events"),

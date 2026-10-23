@@ -23,6 +23,8 @@ interface POI { id: string; x: number; y: number; emoji: string; label: string; 
 
 interface EventData {
   name: string; venue: string; date: string;
+  // "HH:MM" as typed into the time inputs; converted to ms on submit.
+  startTime: string; endTime: string;
   floorPlanUploaded: boolean; staff: string[];
   attendeeCode: string; staffCode: string;
   // Set while the create wizard is in flight, before the event row exists.
@@ -756,7 +758,9 @@ function HomeScreen({ userName, onCreateEvent, onJoinEvent, onJoinAsStaff, onLog
 // Create Event steps
 // ─────────────────────────────────────────────────────────────────────────────
 function CreateStep1({ eventData, onChange, onNext, onBack }: { eventData: Partial<EventData>; onChange: (d: Partial<EventData>) => void; onNext: () => void; onBack: () => void }) {
-  const valid = !!(eventData.name?.trim() && eventData.venue?.trim() && eventData.date);
+  // "HH:MM" strings compare correctly as text, so this is end-after-start.
+  const timesValid = !!(eventData.startTime && eventData.endTime && eventData.endTime > eventData.startTime);
+  const valid = !!(eventData.name?.trim() && eventData.venue?.trim() && eventData.date) && timesValid;
   return (
     <div className="flex-1 flex flex-col px-5 pt-4 pb-8 overflow-y-auto" style={{ background: cream }}>
       <BackBtn onBack={onBack} />
@@ -767,7 +771,9 @@ function CreateStep1({ eventData, onChange, onNext, onBack }: { eventData: Parti
       <div className="flex flex-col gap-4 flex-1">
         {[{ label: "Event Name", key: "name", placeholder: "Event Pulse '26", type: "text" },
           { label: "Venue", key: "venue", placeholder: "IIT Delhi, New Delhi", type: "text" },
-          { label: "Date", key: "date", placeholder: "", type: "date" }].map(({ label, key, placeholder, type }) => (
+          { label: "Date", key: "date", placeholder: "", type: "date" },
+          { label: "Start Time", key: "startTime", placeholder: "", type: "time" },
+          { label: "End Time", key: "endTime", placeholder: "", type: "time" }].map(({ label, key, placeholder, type }) => (
           <div key={key}>
             <label className="text-[10px] font-mono uppercase tracking-widest block mb-1.5" style={{ color: muted }}>{label}</label>
             <input type={type} value={(eventData as Record<string, string>)[key] ?? ""} onChange={(e) => onChange({ ...eventData, [key]: e.target.value })}
@@ -1904,8 +1910,15 @@ export default function App() {
     setCreateBusy(true);
     setCreateError(null);
     try {
+      // "YYYY-MM-DDTHH:MM" with no offset parses as LOCAL time, which is the
+      // zone the organizer typed the times in. The server re-checks both land
+      // on `date` in that same zone.
+      const date = eventData.date ?? "";
       const created = await createEventMutation({
-        name: eventData.name ?? "", venue: eventData.venue ?? "", date: eventData.date ?? "",
+        name: eventData.name ?? "", venue: eventData.venue ?? "", date,
+        startTime: new Date(`${date}T${eventData.startTime ?? ""}`).getTime(),
+        endTime: new Date(`${date}T${eventData.endTime ?? ""}`).getTime(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       if (eventData.mapStorageId) {
         await updateFloorMapMutation({

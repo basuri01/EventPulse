@@ -19,6 +19,8 @@ dist-ssr
 
 # Figma reference export (not part of the app, contains a .env)
 reference/
+# Second Figma reference export, same treatment
+reference-v2/
 
 # Editor directories and files
 .vscode/*

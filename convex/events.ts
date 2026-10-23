@@ -159,17 +159,22 @@ export const joinByCode = mutation({
       .unique();
     if (existing !== null) {
       if (existing.isBanned) throw new Error("You have been removed from this event.");
-      // Rejoin: hand back what they already have rather than duplicating it.
+      // Rejoin: hand back what they already have rather than duplicating it,
+      // and make it the active event again.
+      await ctx.db.patch("memberships", existing._id, { lastOpenedAt: Date.now() });
       return { eventId, role: existing.role, eventName: event.name, rejoined: true };
     }
 
+    const now = Date.now();
     await ctx.db.insert("memberships", {
       eventId,
       userId,
       role,
       isBanned: false,
       trustScore: 60,
-      joinedAt: Date.now(),
+      joinedAt: now,
+      // Joining opens the event, so it becomes the active one.
+      lastOpenedAt: now,
     });
 
     return { eventId, role, eventName: event.name, rejoined: false };
@@ -177,8 +182,9 @@ export const joinByCode = mutation({
 });
 
 /**
- * Event detail for a member. The attendee code is organizer-visible (they share
- * it); the staff code never leaves the organizer.
+ * Event detail for a member. Times and description go to every member. The
+ * attendee code goes to organizers and staff (they share it); the staff code
+ * never leaves the organizer.
  */
 export const get = query({
   args: { eventId: v.id("events") },
@@ -187,17 +193,22 @@ export const get = query({
     const event = await ctx.db.get("events", args.eventId);
     if (event === null) return null;
     const isOrganizer = membership.role === "ORGANIZER";
+    const isModerator = isOrganizer || membership.role === "STAFF";
     return {
       _id: event._id,
       name: event.name,
       venue: event.venue,
       date: event.date,
+      endDate: event.endDate ?? null,
+      startTime: event.startTime ?? null,
+      endTime: event.endTime ?? null,
       description: event.description ?? null,
       isActive: event.isActive,
       mapWidth: event.mapWidth ?? null,
       mapHeight: event.mapHeight ?? null,
       mapUrl: event.mapStorageId ? await ctx.storage.getUrl(event.mapStorageId) : null,
-      attendeeCode: isOrganizer ? event.attendeeCode : null,
+      // Staff share the attendee code too; the staff code stays organizer-only.
+      attendeeCode: isModerator ? event.attendeeCode : null,
       staffCode: isOrganizer ? event.staffCode : null,
       role: membership.role,
     };
@@ -245,6 +256,113 @@ export const updateFloorMap = mutation({
     if (previous !== undefined && previous !== args.storageId) {
       await ctx.storage.delete(previous);
     }
+    return null;
+  },
+});
+
+/** Same rules as `create`: trimmed, blank means none, 2,000 words / 20,000 chars. */
+function normaliseDescription(raw: string | undefined): string | undefined {
+  const description = raw?.trim() || undefined;
+  if (description !== undefined) {
+    if (description.length > MAX_DESCRIPTION_CHARS) throw new Error("Description must be 20,000 characters or fewer.");
+    if (countWords(description) > MAX_DESCRIPTION_WORDS) throw new Error("Description must be 2,000 words or fewer.");
+  }
+  return description;
+}
+
+const MAX_MY_EVENTS = 50;
+// Attendee counts are counted, not stored, so they are capped to keep the
+// query bounded; the client shows "250+" when `attendeeCountCapped` is true.
+const ATTENDEE_COUNT_CAP = 250;
+
+/** The caller's organised events, newest first, with a bounded attendee count. */
+export const listMine = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUser(ctx);
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_organizer", (q) => q.eq("organizerId", userId))
+      .order("desc")
+      .take(MAX_MY_EVENTS);
+    const rows = [];
+    for (const event of events) {
+      const attendees = await ctx.db
+        .query("memberships")
+        .withIndex("by_event_role", (q) => q.eq("eventId", event._id).eq("role", "ATTENDEE"))
+        .take(ATTENDEE_COUNT_CAP + 1);
+      const active = attendees.filter((m) => !m.isBanned);
+      rows.push({
+        _id: event._id,
+        name: event.name,
+        venue: event.venue,
+        date: event.date,
+        endDate: event.endDate ?? null,
+        startTime: event.startTime ?? null,
+        endTime: event.endTime ?? null,
+        isActive: event.isActive,
+        attendeeCount: Math.min(active.length, ATTENDEE_COUNT_CAP),
+        attendeeCountCapped: attendees.length > ATTENDEE_COUNT_CAP,
+      });
+    }
+    return rows;
+  },
+});
+
+/**
+ * Edit an event's details. ORGANIZER only. Codes and the floor plan are not
+ * editable here (the floor plan uses updateFloorMap). A blank endDate turns a
+ * multi-day event back into a single-day one; a blank description removes it.
+ */
+export const update = mutation({
+  args: {
+    eventId: v.id("events"),
+    name: v.string(),
+    venue: v.string(),
+    date: v.string(),
+    endDate: v.optional(v.string()),
+    startTime: v.number(),
+    endTime: v.number(),
+    timeZone: v.string(),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, args.eventId, ["ORGANIZER"]);
+    const event = await ctx.db.get("events", args.eventId);
+    if (event === null) throw new Error("Event not found.");
+    if (!event.isActive) throw new Error("This event has ended and can no longer be edited.");
+
+    const name = args.name.trim();
+    const venue = args.venue.trim();
+    const date = args.date.trim();
+    const endDate = args.endDate?.trim() || undefined;
+    if (!name) throw new Error("Event name is required.");
+    if (!venue) throw new Error("Venue is required.");
+    if (!date) throw new Error("Date is required.");
+    const description = normaliseDescription(args.description);
+    assertEventTimes({ date, endDate, startTime: args.startTime, endTime: args.endTime, timeZone: args.timeZone });
+
+    // `undefined` removes a field in a patch: that is how endDate and
+    // description are cleared.
+    await ctx.db.patch("events", args.eventId, {
+      name, venue, date, endDate, startTime: args.startTime, endTime: args.endTime, description,
+    });
+    return null;
+  },
+});
+
+/**
+ * End an event for everyone. ORGANIZER only. Nothing is deleted: the event,
+ * its members and its reports are kept; it just stops being active, so it
+ * drops out of members' active events and its codes stop working.
+ */
+export const end = mutation({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, args.eventId, ["ORGANIZER"]);
+    const event = await ctx.db.get("events", args.eventId);
+    if (event === null) throw new Error("Event not found.");
+    if (event.isActive) await ctx.db.patch("events", args.eventId, { isActive: false });
     return null;
   },
 });

@@ -1505,8 +1505,8 @@ function MyReportsSheet({ reports, userName, onClose }: { reports: Report[]; use
 // ─────────────────────────────────────────────────────────────────────────────
 // You View
 // ─────────────────────────────────────────────────────────────────────────────
-function YouView({ role, name, onLeave, reports, trustScore, eventName, venue, date, joinedAt, reviewedToday }: {
-  role: Role; name: string; onLeave: () => void; reports: Report[]; trustScore: number;
+function YouView({ role, name, email, onLeave, reports, trustScore, eventName, venue, date, joinedAt, reviewedToday }: {
+  role: Role; name: string; email: string | null; onLeave: () => void; reports: Report[]; trustScore: number;
   eventName: string; venue: string; date: string; joinedAt: number | null; reviewedToday: number;
 }) {
   const [showMyReports, setShowMyReports] = useState(false);
@@ -1515,68 +1515,85 @@ function YouView({ role, name, onLeave, reports, trustScore, eventName, venue, d
   const checkIn = joinedAt === null
     ? "—"
     : `Verified · ${new Date(joinedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  // Only what the server does: +5 per approved report, capped at 100, never
+  // lowered. Scores start at 60, so the last tier is a fallback.
+  const trustMessage = trustScore >= 80
+    ? "Moderators have approved several of your reports at this event. Keep them clear and accurate."
+    : trustScore >= 50
+      ? "Each report a moderator approves adds 5 points to your score."
+      : "Clear, accurate reports build your score over time.";
 
   const attendeeRows = [
+    { label: "Event", value: eventName || "—" },
     { label: "Check-in", value: checkIn },
     { label: "Reports Filed (Lifetime)", value: String(myReports.length) },
   ];
   const staffRows = [
+    { label: "Event", value: eventName || "—" },
     { label: "Venue", value: venue || "—" },
     { label: "Date", value: date || "—" },
     { label: "Reports Reviewed", value: `${reviewedToday} today` },
     { label: "Check-in", value: checkIn },
   ];
+  const rows = role === "attendee" ? attendeeRows : staffRows;
 
   return (
     <>
       <div className="flex-1 overflow-y-auto" style={{ background: cream }}>
-        <div className="sticky top-0 z-10 px-5 pt-4 pb-2" style={{ background: `linear-gradient(to bottom, ${cream} 80%, transparent)` }}>
-          <h2 className="text-xl font-bold text-center" style={{ color: ink, letterSpacing: "-0.02em" }}>You</h2>
-        </div>
-        <div className="flex flex-col items-center gap-3 px-5 pt-2 pb-4">
-          <div className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold"
-            style={{ background: "#e8e3f0", color: accent, border: "3px solid white", boxShadow: "0 4px 20px rgba(91,63,248,0.15)" }}>{initials}</div>
-          <div className="text-center">
-            <p className="font-bold text-lg" style={{ color: ink }}>{name}</p>
-            <p className="text-xs font-mono mt-0.5 uppercase tracking-widest" style={{ color: muted }}>{role} · {eventName}</p>
-          </div>
-        </div>
-
-        {role === "attendee" && (
-          <div className="mx-4 rounded-3xl p-5 flex flex-col items-center mb-3" style={{ background: card, border: `1px solid ${border}` }}>
-            <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: muted }}>Trust Score</p>
-            <TrustScoreCircle score={trustScore} />
-            <p className="text-xs text-center mt-4 leading-relaxed" style={{ color: muted }}>Based on your reports, check-ins, and community interactions.</p>
-          </div>
-        )}
-
-        <div className="px-4 flex flex-col gap-2 pb-32">
-          {(role === "attendee" ? attendeeRows : staffRows).map(({ label, value }) => (
-            <div key={label} className="rounded-2xl px-4 py-3.5 flex justify-between items-center" style={{ background: card, border: `1px solid ${border}` }}>
-              <span className="text-xs font-mono" style={{ color: muted }}>{label}</span>
-              <span className="text-sm font-semibold" style={{ color: ink }}>{value}</span>
+        <div className="px-4 pt-4 pb-32">
+          <div className="rounded-3xl p-4 mb-5" style={{ background: "rgba(255,255,255,0.82)", border: `1px solid ${border}`, boxShadow: "0 6px 20px rgba(77,57,35,0.06)" }}>
+            <div className="flex items-center gap-4">
+              <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center text-xl font-bold shrink-0"
+                style={{ background: "linear-gradient(145deg, #eee8ff, #ddd2ff)", color: accent, border: "3px solid white", boxShadow: "0 5px 18px rgba(91,63,248,0.18)" }}>{initials}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-lg font-bold leading-tight truncate" style={{ color: ink }}>{name}</p>
+                <p className="text-sm font-semibold mt-1 capitalize" style={{ color: accent }}>{role}</p>
+                {/* The signed-in account's real email; left out when the account has none. */}
+                {email && <p className="text-[13px] mt-1 truncate" style={{ color: muted }}>{email}</p>}
+              </div>
             </div>
-          ))}
+          </div>
 
           {role === "attendee" && (
-            <button onClick={() => setShowMyReports(true)}
-              className="rounded-2xl px-4 py-3.5 flex items-center justify-between w-full"
-              style={{ background: `rgba(91,63,248,0.06)`, border: `1px solid rgba(91,63,248,0.15)` }}>
-              <div className="flex items-center gap-2.5">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke={accent} strokeWidth="1.3" />
-                  <path d="M5 6h6M5 9h4" stroke={accent} strokeWidth="1.3" strokeLinecap="round" />
-                </svg>
-                <span className="text-sm font-semibold" style={{ color: accent }}>My Reports</span>
-              </div>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M6 5l4 3-4 3" stroke={accent} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
+            <div className="rounded-3xl p-5 flex flex-col items-center mb-5" style={{ background: card, border: `1px solid ${border}` }}>
+              <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: muted }}>Trust Score</p>
+              <TrustScoreCircle score={trustScore} />
+              <p className="text-xs text-center mt-4 leading-relaxed max-w-[280px]" style={{ color: muted }}>{trustMessage}</p>
+            </div>
           )}
 
+          <p className="text-[10px] font-mono uppercase tracking-widest mb-2 px-1" style={{ color: muted }}>Event details</p>
+          <div className="rounded-3xl overflow-hidden mb-5" style={{ background: "rgba(255,255,255,0.78)", border: `1px solid ${border}` }}>
+            {rows.map(({ label, value }, i) => (
+              <div key={label}>
+                {i > 0 && <div style={{ height: 1, background: border }} />}
+                <div className="px-4 py-3.5 flex justify-between items-center gap-3">
+                  <span className="text-xs font-mono shrink-0" style={{ color: muted }}>{label}</span>
+                  <span className="text-sm font-semibold text-right min-w-0 truncate" style={{ color: ink }}>{value}</span>
+                </div>
+              </div>
+            ))}
+            {role === "attendee" && (
+              <>
+                <div style={{ height: 1, background: border }} />
+                <button onClick={() => setShowMyReports(true)} className="w-full flex items-center gap-3 px-3.5 py-3.5 text-left active:bg-black/[0.02] transition-colors">
+                  <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(91,63,248,0.08)", color: accent }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3" />
+                      <path d="M5 6h6M5 9h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  <span className="flex-1 min-w-0 text-sm font-semibold" style={{ color: ink }}>My Reports</span>
+                  <svg className="shrink-0" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M6 4.5L9.5 8 6 11.5" stroke={dimmed} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </>
+            )}
+          </div>
+
           <button onClick={onLeave}
-            className="w-full py-4 rounded-2xl font-semibold text-sm mt-1 flex items-center justify-center gap-2"
+            className="w-full py-4 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2"
             style={{ background: "rgba(239,68,68,0.08)", color: "#dc2626", border: "1px solid rgba(239,68,68,0.18)" }}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6" stroke="#dc2626" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -2336,7 +2353,7 @@ export default function App() {
                 />
               </div>
             )}
-            {tab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto"><YouView role={role} name={userName} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
+            {tab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto"><YouView role={role} name={userName} email={viewer?.email ?? null} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
             <div className="contents lg:hidden">
               <IslandNav items={attendeeNav} active={tab} onChange={(t) => { setTab(t); if (t !== "map") setPinpointMode(false); }} />
             </div>
@@ -2529,7 +2546,7 @@ export default function App() {
                 />
               </div>
             )}
-            {staffTab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto"><YouView role={role} name={userName} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
+            {staffTab === "you" && <div className="flex-1 flex flex-col min-h-0 w-full sm:max-w-[640px] sm:mx-auto"><YouView role={role} name={userName} email={viewer?.email ?? null} onLeave={() => setShowLeave(true)} reports={reports} trustScore={myTrustScore} eventName={eventName} venue={eventVenue} date={eventDate} joinedAt={activeMembership?.joinedAt ?? null} reviewedToday={reviewedToday} /></div>}
             <div className="contents lg:hidden">
               <IslandNav items={staffNav} active={staffTab} onChange={setStaffTab} />
             </div>

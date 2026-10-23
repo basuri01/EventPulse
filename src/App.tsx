@@ -16,7 +16,7 @@ import landingIllustration from "@/assets/landing-illustration.png";
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
-type Screen = "login" | "home" | "create-1" | "create-2" | "create-3" | "create-done" | "join-scan" | "staff-code" | "app" | "staff-app";
+type Screen = "login" | "home" | "my-events" | "create-1" | "create-2" | "create-3" | "create-done" | "join-scan" | "staff-code" | "app" | "staff-app";
 type Role = "organizer" | "attendee" | "staff";
 type Tab = "map" | "feed" | "you";
 type StaffTab = "map" | "poi" | "reports" | "feed" | "you";
@@ -110,6 +110,69 @@ function timeAgo(createdAt: number, now: number): string {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} hr ago`;
   return `${Math.round(hours / 24)} d ago`;
+}
+
+/**
+ * Per-tab "this tab was inside a workspace" flag, so a REFRESH keeps you in
+ * your workspace while a fresh open (new tab or window, or a new sign-in)
+ * shows the role picker. It stores no event and no role: those always come
+ * from memberships.listMine. If storage is unavailable the safe default is
+ * the role picker.
+ */
+const WORKSPACE_FLAG = "eventpulse.inWorkspace";
+function readWorkspaceFlag(): boolean {
+  try { return sessionStorage.getItem(WORKSPACE_FLAG) === "1"; } catch { return false; }
+}
+function writeWorkspaceFlag(inWorkspace: boolean): void {
+  try {
+    if (inWorkspace) sessionStorage.setItem(WORKSPACE_FLAG, "1");
+    else sessionStorage.removeItem(WORKSPACE_FLAG);
+  } catch { /* storage unavailable: the next load shows the role picker */ }
+}
+
+type EventTimes = { date: string; endDate: string | null; startTime: number | null; endTime: number | null };
+
+/** "5 Nov · 10:00 AM – 5:30 PM", or "5 Nov, 10:00 AM → 7 Nov, 5:30 PM"; date only when there are no times. */
+function formatEventRange(e: EventTimes): string {
+  const day = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const time = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  if (e.startTime === null || e.endTime === null) {
+    const d = new Date(`${e.date}T00:00`);
+    return Number.isNaN(d.getTime()) ? e.date : day(d);
+  }
+  const s = new Date(e.startTime), f = new Date(e.endTime);
+  return s.toDateString() === f.toDateString()
+    ? `${day(s)} · ${time(s)} – ${time(f)}`
+    : `${day(s)}, ${time(s)} → ${day(f)}, ${time(f)}`;
+}
+
+type EventStatus = "live" | "upcoming" | "completed" | "ended";
+/** Ended = the organiser ended it. Otherwise from the times; events without times read as live. */
+function eventStatus(e: EventTimes & { isActive: boolean }, now: number): EventStatus {
+  if (!e.isActive) return "ended";
+  if (e.startTime === null || e.endTime === null) return "live";
+  if (now < e.startTime) return "upcoming";
+  return now < e.endTime ? "live" : "completed";
+}
+
+/**
+ * `Date.now()` that re-renders at the next of `boundaries` (event starts and
+ * ends), so status pills flip on their own. One timeout at a time, clamped to
+ * a minute: browsers treat delays over ~24.8 days as immediate.
+ */
+function useNowAtBoundaries(boundaries: number[]): number {
+  const [now, setNow] = useState(() => Date.now());
+  const key = boundaries.join(",");
+  useEffect(() => {
+    const t = Date.now();
+    const next = boundaries.filter((b) => b > t).sort((a, b) => a - b)[0];
+    const delay = next === undefined ? 60_000 : Math.min(next - t + 50, 60_000);
+    const id = setTimeout(() => setNow(Date.now()), delay);
+    return () => clearTimeout(id);
+    // `key` stands in for `boundaries`, which is a new array every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, key]);
+  return now;
 }
 
 /** Natural pixel dimensions of an image, read before it is uploaded. */
@@ -868,7 +931,7 @@ function SplashScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Home
 // ─────────────────────────────────────────────────────────────────────────────
-function HomeScreen({ userName, onCreateEvent, onJoinEvent, onJoinAsStaff, onLogout }: { userName: string; onCreateEvent: () => void; onJoinEvent: () => void; onJoinAsStaff: () => void; onLogout: () => void }) {
+function HomeScreen({ userName, onCreateEvent, onJoinEvent, onJoinAsStaff, onLogout, error = null }: { userName: string; onCreateEvent: () => void; onJoinEvent: () => void; onJoinAsStaff: () => void; onLogout: () => void; error?: string | null }) {
   const initials = userName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -932,6 +995,113 @@ function HomeScreen({ userName, onCreateEvent, onJoinEvent, onJoinAsStaff, onLog
           </button>
         ))}
       </div>
+      {error && <p className="text-xs text-center mt-4" style={{ color: "#dc2626" }}>{error}</p>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Organizer: Your events
+// ─────────────────────────────────────────────────────────────────────────────
+interface MyEventRow extends EventTimes {
+  _id: Id<"events">; name: string; venue: string; isActive: boolean;
+  attendeeCount: number; attendeeCountCapped: boolean;
+}
+
+const STATUS_PILL: Record<EventStatus, { label: string; bg: string; text: string }> = {
+  live:      { label: "Live",      bg: "rgba(220,38,38,0.1)",  text: "#dc2626" },
+  upcoming:  { label: "Upcoming",  bg: "rgba(91,63,248,0.1)",  text: accent },
+  completed: { label: "Completed", bg: "rgba(75,85,99,0.12)",  text: "#4b5563" },
+  ended:     { label: "Ended",     bg: "rgba(75,85,99,0.12)",  text: "#4b5563" },
+};
+
+function OrganizerEventsScreen({ events, onOpen, onCreate, onBack, opening, error }: {
+  events: MyEventRow[] | undefined;
+  onOpen: (id: Id<"events">) => void;
+  onCreate: () => void;
+  onBack: () => void;
+  opening: Id<"events"> | null;
+  error: string | null;
+}) {
+  const now = useNowAtBoundaries((events ?? []).filter((e) => e.isActive).flatMap((e) => [e.startTime, e.endTime].filter((t): t is number => t !== null)));
+  if (events === undefined) return <SplashScreen />;
+  const active = events.filter((e) => e.isActive);
+  const past = events.filter((e) => !e.isActive);
+
+  const card = (e: MyEventRow, openable: boolean) => {
+    const status = STATUS_PILL[eventStatus(e, now)];
+    const body = (
+      <div className="flex items-start gap-3.5">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
+          style={{ background: `linear-gradient(135deg, ${accent}, #8b74fc)`, boxShadow: "0 7px 16px rgba(91,63,248,0.2)" }}>
+          <svg width="27" height="27" viewBox="0 0 27 27" fill="none">
+            <rect x="3.5" y="5.5" width="20" height="18" rx="3.5" stroke="white" strokeWidth="1.6" />
+            <path d="M8 3.5v5M19 3.5v5M3.5 11h20" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
+            <circle cx="9" cy="16" r="1.3" fill="white" /><circle cx="14" cy="16" r="1.3" fill="white" /><circle cx="19" cy="16" r="1.3" fill="white" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <p className="font-bold text-base truncate" style={{ color: ink }}>{e.name}</p>
+            <span className="px-2 py-1 rounded-full text-[9px] font-mono uppercase shrink-0" style={{ background: status.bg, color: status.text }}>{status.label}</span>
+          </div>
+          <p className="text-xs mt-1 truncate" style={{ color: muted }}>{e.venue}</p>
+          {/* The range is longer than the design's single date, so the range
+              and the count each get a line instead of wrapping mid-row. */}
+          <p className="text-[10px] font-mono mt-2" style={{ color: dimmed }}>{formatEventRange(e)}</p>
+          <p className="text-[10px] font-mono mt-0.5" style={{ color: dimmed }}>
+            {e.attendeeCountCapped ? `${e.attendeeCount}+` : e.attendeeCount} attendee{e.attendeeCount === 1 && !e.attendeeCountCapped ? "" : "s"}
+          </p>
+        </div>
+        {openable && (
+          <svg className="self-center shrink-0" width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M7 5l4 4-4 4" stroke={dimmed} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </div>
+    );
+    const style = { background: "rgba(255,255,255,0.86)", border: `1px solid ${border}`, boxShadow: "0 7px 20px rgba(90,74,50,0.08)" };
+    return openable ? (
+      <button key={e._id} onClick={() => onOpen(e._id)} disabled={opening !== null}
+        className="w-full rounded-[22px] p-4 text-left active:scale-[0.985] transition-all"
+        style={{ ...style, opacity: opening !== null && opening !== e._id ? 0.5 : 1 }}>{body}</button>
+    ) : (
+      <div key={e._id} className="w-full rounded-[22px] p-4" style={style}>{body}</div>
+    );
+  };
+
+  return (
+    <div className="flex-1 flex flex-col px-5 pt-4 pb-8 overflow-y-auto" style={{ background: cream }}>
+      <BackBtn onBack={onBack} />
+      <div className="mt-6 mb-7">
+        <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: muted }}>Organizer workspace</p>
+        <h2 className="text-[28px] leading-tight font-bold mt-1" style={{ color: ink, letterSpacing: "-0.035em" }}>Your events</h2>
+        {events.length > 0 && (
+          <p className="text-sm mt-1.5" style={{ color: muted }}>
+            {events.length} event{events.length === 1 ? "" : "s"} created{active.length > 0 ? " · Select one to open its dashboard." : ""}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {active.map((e) => card(e, true))}
+        {error && <p className="text-xs text-center" style={{ color: "#dc2626" }}>{error}</p>}
+        <button onClick={onCreate}
+          className="w-full min-h-[92px] rounded-[22px] flex items-center justify-center gap-3 active:scale-[0.985] transition-all"
+          style={{ background: "rgba(91,63,248,0.04)", border: "1.5px dashed rgba(91,63,248,0.35)", color: accent }}>
+          <span className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "rgba(91,63,248,0.1)" }}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 4v12M4 10h12" stroke={accent} strokeWidth="1.8" strokeLinecap="round" /></svg>
+          </span>
+          <span className="font-semibold text-sm">Create a new event</span>
+        </button>
+      </div>
+
+      {past.length > 0 && (
+        <>
+          <p className="text-[10px] font-mono uppercase tracking-widest mt-8 mb-3" style={{ color: muted }}>Past</p>
+          <div className="flex flex-col gap-3">{past.map((e) => card(e, false))}</div>
+        </>
+      )}
     </div>
   );
 }
@@ -2043,6 +2213,7 @@ export default function App() {
   const updateFloorMapMutation = useMutation(api.events.updateFloorMap);
   const joinByCodeMutation = useMutation(api.events.joinByCode);
   const leaveMutation = useMutation(api.memberships.leave);
+  const openMembershipMutation = useMutation(api.memberships.open);
   const createReportMutation = useMutation(api.reports.create);
   const updateStatusMutation = useMutation(api.reports.updateStatus);
   const setPriorityMutation = useMutation(api.reports.setPriority);
@@ -2053,6 +2224,11 @@ export default function App() {
   const removeMapPinMutation = useMutation(api.mapPins.remove);
 
   const [screen, setScreen] = useState<Screen>("login");
+  // Your events: only fetched while that screen is showing.
+  const myEvents = useQuery(api.events.listMine, isAuthenticated && screen === "my-events" ? {} : "skip");
+  const [openingEventId, setOpeningEventId] = useState<Id<"events"> | null>(null);
+  const [myEventsError, setMyEventsError] = useState<string | null>(null);
+  const [homeError, setHomeError] = useState<string | null>(null);
   // Set once, when auth and memberships have both settled, so "still loading"
   // is never mistaken for "no membership".
   const [restored, setRestored] = useState(false);
@@ -2123,6 +2299,7 @@ export default function App() {
     if (isLoading || isAuthenticated) return;
     setRestored(false);
     setScreen("login");
+    writeWorkspaceFlag(false);
     setPendingRole("attendee");
     setCreateBusy(false);
     setCreateError(null);
@@ -2153,12 +2330,41 @@ export default function App() {
   useEffect(() => {
     if (isLoading || !isAuthenticated || membershipsLoading || restored) return;
     setRestored(true);
-    if (activeMembership) {
+    // A refresh inside a workspace returns to it; a fresh open (or a new
+    // sign-in) shows the role picker. Which event and role is always the DB's.
+    if (activeMembership && readWorkspaceFlag()) {
       setScreen(activeMembership.role === "ATTENDEE" ? "app" : "staff-app");
     } else {
       setScreen("home");
     }
   }, [isLoading, isAuthenticated, membershipsLoading, restored, activeMembership]);
+
+  // Keep the per-tab flag in step with the screen (after the first route).
+  useEffect(() => {
+    if (!restored) return;
+    writeWorkspaceFlag(screen === "app" || screen === "staff-app");
+  }, [screen, restored]);
+
+  /** Make an event active in the DB, then show its workspace. Errors stay on screen. */
+  const openEvent = async (eventId: Id<"events">, target: "app" | "staff-app", onError: (m: string) => void) => {
+    setOpeningEventId(eventId);
+    try {
+      await openMembershipMutation({ eventId });
+      setScreen(target);
+    } catch (err) {
+      onError(errorMessage(err));
+    } finally {
+      setOpeningEventId(null);
+    }
+  };
+
+  /** Attendee / Staff on the role picker: resume the most recent such membership, else join. */
+  const resumeOrJoin = (role: "ATTENDEE" | "STAFF") => {
+    setHomeError(null);
+    const membership = memberships?.find((m) => m.role === role);
+    if (!membership) { setScreen(role === "ATTENDEE" ? "join-scan" : "staff-code"); return; }
+    void openEvent(membership.eventId, role === "ATTENDEE" ? "app" : "staff-app", setHomeError);
+  };
 
   const approvedReports = reports.filter(isLiveReport);
   const eventName = activeEvent?.name ?? ((eventData.name?.trim()) || "Event Pulse '26");
@@ -2325,9 +2531,16 @@ export default function App() {
         return <LoginScreen onLogin={() => signIn("google")} />;
 
       case "home":
-        return <HomeScreen userName={userName} onCreateEvent={() => setScreen("create-1")} onJoinEvent={() => setScreen("join-scan")} onJoinAsStaff={() => setScreen("staff-code")} onLogout={() => { void signOut(); }} />;
+        return <HomeScreen userName={userName} error={homeError}
+          onCreateEvent={() => { setHomeError(null); setMyEventsError(null); setScreen("my-events"); }}
+          onJoinEvent={() => resumeOrJoin("ATTENDEE")} onJoinAsStaff={() => resumeOrJoin("STAFF")} onLogout={() => { void signOut(); }} />;
 
-      case "create-1": return <CreateStep1 eventData={eventData} onChange={setEventData} onNext={() => setScreen("create-2")} onBack={() => setScreen("home")} />;
+      case "my-events":
+        return <OrganizerEventsScreen events={myEvents} opening={openingEventId} error={myEventsError}
+          onBack={() => setScreen("home")} onCreate={() => setScreen("create-1")}
+          onOpen={(id) => { setMyEventsError(null); void openEvent(id, "staff-app", setMyEventsError); }} />;
+
+      case "create-1": return <CreateStep1 eventData={eventData} onChange={setEventData} onNext={() => setScreen("create-2")} onBack={() => setScreen("my-events")} />;
       case "create-2": return <CreateStep2 eventData={eventData} onChange={setEventData} onNext={() => setScreen("create-3")} onBack={() => setScreen("create-1")} />;
       case "create-3": return <CreateStep3 eventData={eventData} onChange={setEventData} onNext={() => { void handleCreateEvent(); }} onBack={() => { setCreateError(null); setScreen("create-2"); }} busy={createBusy} error={createError} />;
 

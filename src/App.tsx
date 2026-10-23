@@ -702,33 +702,31 @@ function LoginScreen({ onLogin }: { onLogin: () => Promise<unknown> }) {
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center px-6 pt-8 pb-8 min-h-0" style={{ background: cream }}>
-      <div className="flex flex-col items-center gap-3 shrink-0">
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-          style={{ background: `linear-gradient(135deg, ${accent} 0%, #8b74fc 100%)`, boxShadow: "0 8px 24px rgba(91,63,248,0.3)" }}>
-          <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
-            <circle cx="15" cy="15" r="10" stroke="white" strokeWidth="2" />
-            <path d="M15 8v7l4 4" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <div className="flex-1 flex flex-col items-center px-6 pt-[70px] pb-8 min-h-0" style={{ background: cream }}>
+      <div className="flex flex-col items-center shrink-0">
+        <div className="w-[60px] h-[60px] rounded-2xl flex items-center justify-center"
+          style={{ background: `linear-gradient(135deg, ${accent} 0%, #794df7 100%)`, boxShadow: "0 10px 26px rgba(91,63,248,0.35)" }}>
+          <svg width="31" height="31" viewBox="0 0 31 31" fill="none">
+            <circle cx="15.5" cy="15.5" r="10.5" stroke="white" strokeWidth="2" />
+            <path d="M15.5 8.5v7l5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <div className="text-center">
-          <h1 className="text-2xl font-bold" style={{ color: ink, letterSpacing: "-0.02em" }}>Event Pulse</h1>
-          <p className="text-sm mt-1" style={{ color: muted }}>Smart event incident management</p>
-        </div>
+        <h1 className="mt-4 text-[32px] leading-none font-bold" style={{ color: ink, letterSpacing: "-0.035em" }}>Event Pulse</h1>
+        <p className="mt-3 text-base" style={{ color: muted }}>Smart event incident management</p>
       </div>
       {/* Natural size when it fits; the only block allowed to shrink, so on a
           short screen it gives way first and the button never leaves the
           viewport. Leftover height goes to the spacer below the button, which
           is where the design leaves its empty space. */}
-      <div className="min-h-0 w-full flex items-start justify-center mt-8" style={{ flex: "0 1 auto" }}>
+      <div className="min-h-0 w-full flex items-start justify-center mt-5" style={{ flex: "0 1 auto" }}>
         <img src={landingIllustration}
           alt="A phone showing a venue map with a location pin, surrounded by cards for crowd updates, events, live updates and live notifications"
           className="w-full max-h-full object-contain" />
       </div>
-      <div className="w-full flex flex-col gap-3 shrink-0 mt-8">
+      <div className="w-full flex flex-col gap-3 shrink-0 mt-5">
         <button onClick={() => { void login(); }} disabled={busy}
-          className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-semibold text-sm text-white"
-          style={{ background: accent, boxShadow: "0 8px 24px rgba(91,63,248,0.3)", opacity: busy ? 0.4 : 1, cursor: busy ? "not-allowed" : "pointer" }}>
+          className="w-full flex items-center justify-center gap-3 py-[17px] rounded-2xl font-semibold text-base text-white transition-transform active:scale-[0.98]"
+          style={{ background: `linear-gradient(100deg, ${accent} 0%, #6531f4 100%)`, boxShadow: "0 10px 24px rgba(91,63,248,0.28)", opacity: busy ? 0.4 : 1, cursor: busy ? "not-allowed" : "pointer" }}>
           {/* Google's branding wants the coloured G on white, so it sits in its own white disc. */}
           <span className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: "white" }}>
             <GmailIcon />
@@ -773,26 +771,26 @@ function HomeScreen({ userName, onCreateEvent, onJoinEvent, onJoinAsStaff, onLog
     return () => document.removeEventListener("mousedown", handler);
   }, [showMenu]);
   const options = [
-    { label: "Create an Event", sub: "Organizer · Upload floor plan, manage staff", color: accent, action: onCreateEvent,
-      icon: <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="4" y="6" width="20" height="16" rx="3" stroke="white" strokeWidth="1.5" /><path d="M14 10v8M10 14h8" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg> },
-    { label: "Join an Event", sub: "Attendee · Scan QR to enter", color: "#0ea5e9", action: onJoinEvent,
-      icon: <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="4" y="4" width="8" height="8" rx="2" stroke="white" strokeWidth="1.5" /><rect x="16" y="4" width="8" height="8" rx="2" stroke="white" strokeWidth="1.5" /><rect x="4" y="16" width="8" height="8" rx="2" stroke="white" strokeWidth="1.5" /><path d="M16 16h4M20 16v4M16 20h8" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg> },
-    { label: "Join as Staff", sub: "Staff · Enter staff code", color: "#10b981", action: onJoinAsStaff,
-      icon: <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="10" r="4" stroke="white" strokeWidth="1.5" /><path d="M6 24c0-4.4 3.6-8 8-8s8 3.6 8 8" stroke="white" strokeWidth="1.5" strokeLinecap="round" /><circle cx="22" cy="20" r="4" fill="white" fillOpacity="0.2" stroke="white" strokeWidth="1.5" /><path d="M20.5 20l1 1 2-2" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg> },
+    { label: "Organizer", sub: "Create and manage events, upload floor plans and manage staff.", color: accent, action: onCreateEvent,
+      icon: <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="5" y="7" width="22" height="20" rx="4" stroke="white" strokeWidth="1.8" /><path d="M10 4v6M22 4v6M5 13h22M16 17v7M12.5 20.5h7" stroke="white" strokeWidth="1.8" strokeLinecap="round" /></svg> },
+    { label: "Attendee", sub: "Join an event with its QR or event code and see live updates.", color: "#0ea5e9", action: onJoinEvent,
+      icon: <svg width="34" height="34" viewBox="0 0 34 34" fill="none"><circle cx="13" cy="11" r="5" stroke="white" strokeWidth="1.8" /><path d="M3 29c0-5.5 4.5-10 10-10s10 4.5 10 10M22 9a4.5 4.5 0 010 9M25 21c3.5.8 6 4 6 8" stroke="white" strokeWidth="1.8" strokeLinecap="round" /></svg> },
+    { label: "Staff", sub: "Join as event staff and access staff tools using staff code.", color: "#10b981", action: onJoinAsStaff,
+      icon: <svg width="34" height="34" viewBox="0 0 34 34" fill="none"><circle cx="14" cy="10" r="5" stroke="white" strokeWidth="1.8" /><path d="M4 29c0-5.5 4.5-10 10-10 2.2 0 4.2.7 5.8 1.9" stroke="white" strokeWidth="1.8" strokeLinecap="round" /><circle cx="25" cy="24" r="5" stroke="white" strokeWidth="1.7" /><path d="M25 16.5v2M25 29.5v2M17.5 24h2M30.5 24h2M19.7 18.7l1.4 1.4M28.9 27.9l1.4 1.4M30.3 18.7l-1.4 1.4M21.1 27.9l-1.4 1.4" stroke="white" strokeWidth="1.4" strokeLinecap="round" /></svg> },
   ];
   return (
     <div className="flex-1 flex flex-col px-5 pt-4 pb-10" style={{ background: cream }}>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between">
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: muted }}>Welcome back</p>
-          <h1 className="text-xl font-bold mt-0.5" style={{ color: ink, letterSpacing: "-0.02em" }}>{userName.split(" ")[0]}</h1>
+          <p className="text-[10px] font-mono uppercase tracking-[0.13em]" style={{ color: muted }}>Welcome back</p>
+          <h1 className="text-2xl leading-none font-bold mt-1.5" style={{ color: ink, letterSpacing: "-0.025em" }}>{userName.split(" ")[0]}</h1>
         </div>
         <div className="relative" ref={menuRef}>
           <button onClick={() => setShowMenu((v) => !v)}
-            className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm"
+            className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm"
             style={{ background: "#e8e3f0", color: accent }}>{initials}</button>
           {showMenu && (
-              <div className="absolute right-0 top-12 z-50 rounded-2xl overflow-hidden shadow-xl"
+              <div className="absolute right-0 top-[52px] z-50 rounded-2xl overflow-hidden shadow-xl"
                 style={{ background: "#faf8f5", border: `1px solid ${border}`, minWidth: 140 }}>
                 <button onClick={() => { setShowMenu(false); onLogout(); }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-left"
@@ -806,20 +804,20 @@ function HomeScreen({ userName, onCreateEvent, onJoinEvent, onJoinAsStaff, onLog
             )}
         </div>
       </div>
-      <h2 className="text-base font-semibold mb-4 text-center" style={{ color: ink }}>What would you like to do?</h2>
-      <div className="flex flex-col gap-3">
+      <h2 className="text-[22px] font-bold mt-[82px] mb-9 text-center" style={{ color: ink, letterSpacing: "-0.025em" }}>What&apos;s your role</h2>
+      <div className="flex flex-col gap-3.5">
         {options.map((opt) => (
           <button key={opt.label} onClick={opt.action}
-            className="flex items-center gap-4 p-4 rounded-2xl text-left active:scale-[0.98] transition-all"
-            style={{ background: card, border: `1px solid ${border}`, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
-              style={{ background: `linear-gradient(135deg, ${opt.color} 0%, ${opt.color}bb 100%)` }}>{opt.icon}</div>
+            className="flex items-center gap-4 px-4 py-3.5 min-h-[94px] rounded-[22px] text-left active:scale-[0.98] transition-all"
+            style={{ background: "rgba(255,255,255,0.86)", border: "1px solid rgba(255,255,255,0.92)", boxShadow: "0 7px 18px rgba(90,74,50,0.08)" }}>
+            <div className="w-[58px] h-[58px] rounded-[20px] flex items-center justify-center shrink-0"
+              style={{ background: `linear-gradient(135deg, ${opt.color} 0%, ${opt.color}b8 100%)`, boxShadow: `0 6px 14px ${opt.color}2e` }}>{opt.icon}</div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-base" style={{ color: ink }}>{opt.label}</p>
-              <p className="text-xs mt-0.5" style={{ color: muted }}>{opt.sub}</p>
+              <p className="font-bold text-[17px] leading-tight" style={{ color: ink }}>{opt.label}</p>
+              <p className="text-[13px] leading-[1.35] mt-1" style={{ color: muted }}>{opt.sub}</p>
             </div>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M7 5l4 4-4 4" stroke={dimmed} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <svg className="shrink-0" width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M7.5 5l5 5-5 5" stroke={dimmed} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
         ))}
